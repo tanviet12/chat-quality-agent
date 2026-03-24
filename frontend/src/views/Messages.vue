@@ -233,13 +233,14 @@
                     <template v-for="(att, i) in parseAttachments(msg)" :key="i">
                       <div v-if="isImageAttachment(att)" class="mb-1">
                         <img
-                          v-if="authImageCache[getAttachmentUrl(att)]"
+                          v-if="authImageCache[getAttachmentUrl(att)] && authImageCache[getAttachmentUrl(att)] !== 'loading'"
                           :src="authImageCache[getAttachmentUrl(att)]"
                           style="max-width: 200px; max-height: 200px; border-radius: 8px; cursor: pointer;"
                           @click="openUrl(getAttachmentUrl(att))"
                           @error="onImageError($event, att)"
                         />
-                        <v-chip v-else size="x-small" variant="tonal" color="grey">
+                        <v-progress-circular v-else-if="authImageCache[getAttachmentUrl(att)] === 'loading'" indeterminate size="24" width="2" class="ma-2" />
+                        <v-chip v-else-if="!getAttachmentUrl(att)" size="x-small" variant="tonal" color="grey">
                           <v-icon start size="12">mdi-image</v-icon>
                           {{ att.name || '[Ảnh]' }}
                         </v-chip>
@@ -663,7 +664,7 @@ async function loadAuthImage(url: string) {
     authImageCache.value[url] = url
     return
   }
-  authImageCache.value[url] = '' // placeholder to prevent duplicate fetches
+  authImageCache.value[url] = 'loading'
   try {
     const token = localStorage.getItem('cqa_access_token')
     const resp = await fetch(url, {
@@ -672,8 +673,12 @@ async function loadAuthImage(url: string) {
     if (resp.ok) {
       const blob = await resp.blob()
       authImageCache.value[url] = URL.createObjectURL(blob)
+    } else {
+      delete authImageCache.value[url] // allow retry
     }
-  } catch { /* ignore */ }
+  } catch {
+    delete authImageCache.value[url] // allow retry
+  }
 }
 
 // Load auth images when messages change

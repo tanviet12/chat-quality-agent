@@ -42,7 +42,7 @@
       </v-card>
     </v-dialog>
 
-    <div class="d-flex flex-wrap align-center mb-2 ga-2">
+    <div class="d-flex flex-wrap align-center mb-4 ga-2">
       <h1 class="text-h5 font-weight-bold d-none d-md-block">{{ $t('dashboard') }}</h1>
       <v-spacer class="d-none d-md-block" />
       <v-chip-group v-model="datePreset">
@@ -50,13 +50,17 @@
           {{ p.label }}
         </v-chip>
       </v-chip-group>
+      <!-- Desktop: inline with chips -->
+      <v-text-field v-model="dateFrom" type="date" density="compact" hide-details style="max-width: 160px" class="d-none d-md-block" @change="loadDashboard" />
+      <v-text-field v-model="dateTo" type="date" density="compact" hide-details style="max-width: 160px" class="d-none d-md-block" @change="loadDashboard" />
     </div>
-    <v-row dense class="mb-4">
-      <v-col cols="6" md="auto">
-        <v-text-field v-model="dateFrom" type="date" density="compact" hide-details style="max-width: 180px" @change="loadDashboard" />
+    <!-- Mobile: separate row -->
+    <v-row dense class="mb-4 d-md-none">
+      <v-col cols="6">
+        <v-text-field v-model="dateFrom" type="date" density="compact" hide-details @change="loadDashboard" />
       </v-col>
-      <v-col cols="6" md="auto">
-        <v-text-field v-model="dateTo" type="date" density="compact" hide-details style="max-width: 180px" @change="loadDashboard" />
+      <v-col cols="6">
+        <v-text-field v-model="dateTo" type="date" density="compact" hide-details @change="loadDashboard" />
       </v-col>
     </v-row>
 

@@ -161,6 +161,13 @@ router.beforeEach(async (to) => {
   }
 })
 
+// Auto-reload when JS chunks are stale after deployment
+router.onError((error) => {
+  if (error.message.includes('dynamically imported module') || error.message.includes('Failed to fetch')) {
+    window.location.reload()
+  }
+})
+
 // Clear cache on logout
 export function clearTenantCache() {
   validTenantIds.clear()

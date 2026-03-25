@@ -117,7 +117,7 @@
         </v-col>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">{{ $t('ai_model') }}</div>
-          <div class="text-body-2">{{ job.ai_provider }} / {{ job.ai_model }}</div>
+          <div class="text-body-2">{{ tenantAIProvider }} / {{ tenantAIModel }}</div>
         </v-col>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">{{ $t('job_wizard_step_analysis_schedule') }}</div>
@@ -710,6 +710,8 @@ const jobStore = useJobStore()
 const tenantId = computed(() => route.params.tenantId as string)
 const jobId = computed(() => route.params.jobId as string)
 const job = ref<Record<string, any> | null>(null)
+const tenantAIProvider = ref('')
+const tenantAIModel = ref('')
 const isClassification = computed(() => job.value?.job_type === 'classification')
 
 const TAG_COLORS = ['#7E57C2', '#1E88E5', '#00897B', '#FB8C00', '#D81B60', '#00ACC1', '#3949AB', '#E64A19', '#7CB342', '#6D4C41']
@@ -1002,6 +1004,12 @@ onMounted(async () => {
   if (job.value?.job_type === 'classification') resultFilter.value = 'classified'
   await jobStore.fetchJobRuns(tenantId.value, jobId.value)
   await jobStore.fetchAllJobResults(tenantId.value, jobId.value)
+  // Load tenant AI settings (jobs use global settings)
+  try {
+    const { data } = await api.get(`/tenants/${tenantId.value}/settings`)
+    tenantAIProvider.value = data?.settings?.ai_provider || 'claude'
+    tenantAIModel.value = data?.settings?.ai_model || ''
+  } catch { /* fallback empty */ }
 })
 
 async function pollUntilComplete() {

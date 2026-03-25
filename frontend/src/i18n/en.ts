@@ -120,6 +120,7 @@ export default {
   ai_config: 'AI Configuration',
   analysis_settings: 'Analysis',
   ai_provider: 'AI Provider',
+  job_uses_global_ai_settings: 'Jobs use AI settings from Settings page.',
   api_key: 'API Key',
   general: 'General',
   security: 'Security',

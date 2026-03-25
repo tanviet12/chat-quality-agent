@@ -119,7 +119,7 @@ const form = ref({
   rules_content: '',
   rules_config: '[]',
   skip_conditions: '',
-  ai_provider: 'claude',
+  ai_provider: '',
   ai_model: '',
   outputs: '[]',
   outputs_validated: true,

@@ -19,12 +19,10 @@
       class="mt-3"
     />
 
-    <v-select
-      v-model="form.ai_provider"
-      :label="$t('ai_provider')"
-      :items="[{ title: 'Claude (Anthropic)', value: 'claude' }, { title: 'Gemini (Google)', value: 'gemini' }]"
-      class="mt-4"
-    />
+    <v-alert type="info" variant="tonal" density="compact" class="mt-4">
+      {{ $t('ai_provider') }}: {{ $t('job_uses_global_ai_settings') }}
+      <router-link :to="`/${form.tenant_id || $route.params.tenantId}/settings`" class="ml-1">{{ $t('settings') }}</router-link>
+    </v-alert>
   </div>
 </template>
 

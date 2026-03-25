@@ -29,7 +29,7 @@ type CreateJobRequest struct {
 	RulesContent    string          `json:"rules_content"`
 	RulesConfig     json.RawMessage `json:"rules_config"`
 	SkipConditions  string          `json:"skip_conditions"`
-	AIProvider      string          `json:"ai_provider" binding:"required,oneof=claude gemini"`
+	AIProvider      string          `json:"ai_provider" binding:"omitempty,oneof=claude gemini"`
 	AIModel         string          `json:"ai_model"`
 	Outputs         json.RawMessage `json:"outputs" binding:"required"`
 	OutputSchedule  string          `json:"output_schedule" binding:"required,oneof=instant scheduled cron none"`
@@ -56,6 +56,17 @@ func CreateJob(c *gin.Context) {
 	}
 
 	tenantID := middleware.GetTenantID(c)
+
+	// Fallback ai_provider to tenant setting if not provided
+	if req.AIProvider == "" {
+		var providerSetting models.AppSetting
+		if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_provider").First(&providerSetting).Error; err == nil {
+			req.AIProvider = providerSetting.ValuePlain
+		}
+	}
+	if req.AIProvider == "" {
+		req.AIProvider = "claude" // ultimate fallback
+	}
 
 	channelIDsJSON, _ := json.Marshal(req.InputChannelIDs)
 	rulesConfig := "{}"

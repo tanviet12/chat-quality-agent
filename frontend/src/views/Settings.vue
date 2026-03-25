@@ -167,6 +167,8 @@ const claudeModels = [
   { title: 'Claude Sonnet 4.6 (Recommended)', value: 'claude-sonnet-4-6' },
   { title: 'Claude Haiku 4.5 (Fast & Cheap)', value: 'claude-haiku-4-5-20251001' },
   { title: 'Claude Opus 4 (Most Capable)', value: 'claude-opus-4' },
+  { title: 'Claude Sonnet 4.5 (CLIProxy)', value: 'claude-sonnet-4-5-20250929' },
+  { title: 'Claude Opus 4.6 (CLIProxy)', value: 'claude-opus-4-6' },
 ]
 const geminiModels = [
   { title: 'Gemini 2.0 Flash (Fast & Cheap)', value: 'gemini-2.0-flash' },

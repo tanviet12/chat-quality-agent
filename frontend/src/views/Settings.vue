@@ -52,6 +52,16 @@
             class="mb-3"
           />
 
+          <v-text-field
+            v-model="aiSettings.baseUrl"
+            label="Base URL (tùy chọn)"
+            :placeholder="aiSettings.provider === 'claude' ? 'https://api.anthropic.com' : 'https://generativelanguage.googleapis.com'"
+            hint="Để trống để dùng mặc định. Dùng khi cần proxy (OpenRouter, LiteLLM) hoặc self-hosted."
+            persistent-hint
+            clearable
+            class="mb-3"
+          />
+
           <div class="d-flex ga-2">
             <v-btn color="primary" :loading="savingAI" @click="saveAI">{{ $t('save_settings') }}</v-btn>
             <v-btn variant="outlined" :loading="testingKey" @click="testKey">{{ $t('test_api_key') }}</v-btn>
@@ -163,7 +173,7 @@ const geminiModels = [
   { title: 'Gemini 2.5 Pro (Most Capable)', value: 'gemini-2.5-pro' },
 ]
 
-const aiSettings = reactive({ provider: 'claude', model: 'claude-sonnet-4-6', apiKey: '', batchMode: true, batchSize: 5 })
+const aiSettings = reactive({ provider: 'claude', model: 'claude-sonnet-4-6', apiKey: '', baseUrl: '', batchMode: true, batchSize: 5 })
 const generalSettings = reactive({ companyName: '', timezone: 'Asia/Ho_Chi_Minh', language: 'vi', exchangeRate: 26000 })
 
 const modelOptions = computed(() => {
@@ -181,6 +191,7 @@ async function loadSettings() {
     if (data.settings.ai_provider) aiSettings.provider = data.settings.ai_provider
     if (data.settings.ai_model) aiSettings.model = data.settings.ai_model
     if (data.settings.ai_api_key) aiSettings.apiKey = data.settings.ai_api_key
+    if (data.settings.ai_base_url) aiSettings.baseUrl = data.settings.ai_base_url
     if (data.settings.ai_batch_mode) aiSettings.batchMode = data.settings.ai_batch_mode === 'true'
     if (data.settings.ai_batch_size) aiSettings.batchSize = parseInt(data.settings.ai_batch_size) || 5
     if (data.settings.exchange_rate_vnd) generalSettings.exchangeRate = parseFloat(data.settings.exchange_rate_vnd) || 26000
@@ -222,6 +233,7 @@ async function saveAI() {
       provider: aiSettings.provider,
       model: aiSettings.model,
       api_key: aiSettings.apiKey,
+      base_url: aiSettings.baseUrl || '',
       batch_mode: aiSettings.batchMode ? 'true' : 'false',
       batch_size: String(aiSettings.batchSize),
     })

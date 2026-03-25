@@ -384,11 +384,18 @@ func (a *Analyzer) getProvider(job models.Job) (ai.AIProvider, error) {
 		model = modelSetting.ValuePlain
 	}
 
+	// Get base URL from tenant settings (optional)
+	var baseURL string
+	var baseURLSetting models.AppSetting
+	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", job.TenantID, "ai_base_url").First(&baseURLSetting).Error; err == nil {
+		baseURL = baseURLSetting.ValuePlain
+	}
+
 	switch provider {
 	case "claude":
-		return ai.NewClaudeProvider(apiKey, model, a.cfg.AIMaxTokens), nil
+		return ai.NewClaudeProvider(apiKey, model, a.cfg.AIMaxTokens, baseURL), nil
 	case "gemini":
-		return ai.NewGeminiProvider(apiKey, model), nil
+		return ai.NewGeminiProvider(apiKey, model, baseURL), nil
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s", provider)
 	}

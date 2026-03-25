@@ -110,7 +110,7 @@
           <div class="d-flex justify-space-between align-center">
             <div>
               <div class="text-body-2 text-grey">{{ $t('ai_cost') }}</div>
-              <div class="text-h5 font-weight-bold mt-1">{{ Math.round(costToday * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h5 font-weight-bold mt-1">{{ Math.round(costToday * exchangeRate.value).toLocaleString('vi-VN') }}đ</div>
             </div>
             <v-icon color="warning" size="32" class="opacity-50">mdi-currency-usd</v-icon>
           </div>
@@ -170,11 +170,11 @@
           <div class="d-flex ga-4 mb-3">
             <div>
               <div class="text-caption text-grey">{{ $t('cost_today') }}</div>
-              <div class="text-h6 font-weight-bold">{{ Math.round(costToday * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h6 font-weight-bold">{{ Math.round(costToday * exchangeRate.value).toLocaleString('vi-VN') }}đ</div>
             </div>
             <div>
               <div class="text-caption text-grey">{{ $t('cost_this_month') }}</div>
-              <div class="text-h6 font-weight-bold">{{ Math.round(costMonth * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h6 font-weight-bold">{{ Math.round(costMonth * exchangeRate.value).toLocaleString('vi-VN') }}đ</div>
             </div>
           </div>
 
@@ -191,7 +191,7 @@
               <tr v-for="day in costByDay.slice(0, 7)" :key="day.date">
                 <td>{{ formatDisplayDate(day.date) }}</td>
                 <td class="text-right text-caption">{{ (day.input_tokens + day.output_tokens).toLocaleString() }}</td>
-                <td class="text-right">{{ Math.round(day.total_cost * 26000).toLocaleString('vi-VN') }}đ</td>
+                <td class="text-right">{{ Math.round(day.total_cost * exchangeRate.value).toLocaleString('vi-VN') }}đ</td>
               </tr>
             </tbody>
           </v-table>
@@ -278,6 +278,7 @@ const recentActivity = computed(() => {
 const costToday = ref(0)
 const costMonth = ref(0)
 const costByDay = ref<any[]>([])
+const exchangeRate = ref(26000)
 const services = ref([
   { name: 'API Server', ok: true },
   { name: 'Database', ok: true },
@@ -389,7 +390,7 @@ const costChartData = computed(() => ({
   labels: [...costByDay.value].reverse().map(d => formatChartDate(d.date)),
   datasets: [{
     label: 'Chi phí (VNĐ)',
-    data: [...costByDay.value].reverse().map(d => Math.round(d.total_cost * 26000)),
+    data: [...costByDay.value].reverse().map(d => Math.round(d.total_cost * exchangeRate.value)),
     borderColor: '#FFA726',
     backgroundColor: 'rgba(255,167,38,0.1)',
     fill: true,
@@ -480,6 +481,12 @@ async function resetDemo() {
 onMounted(() => {
   loadDemoStatus()
   loadDashboard()
+  // Fetch tenant exchange rate setting
+  api.get(`/tenants/${tenantId.value}/settings`).then(({ data }) => {
+    if (data.settings?.exchange_rate_vnd) {
+      exchangeRate.value = parseFloat(data.settings.exchange_rate_vnd) || 26000
+    }
+  }).catch(() => {})
 })
 
 function timeAgo(dateStr: string) {

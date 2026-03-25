@@ -260,7 +260,8 @@ func TestRunJob(c *gin.Context) {
 		}()
 		cfg, _ := config.Load()
 		analyzer := engine.NewAnalyzer(cfg)
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 		if _, err := analyzer.RunJobWithLimit(ctx, job, 3); err != nil {
 			log.Printf("[test-run] error for job %s: %v", job.Name, err)
 		}

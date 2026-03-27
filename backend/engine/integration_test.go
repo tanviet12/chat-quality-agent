@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/vietbui/chat-quality-agent/ai"
-	"github.com/vietbui/chat-quality-agent/config"
-	"github.com/vietbui/chat-quality-agent/db"
-	"github.com/vietbui/chat-quality-agent/db/models"
-	"github.com/vietbui/chat-quality-agent/pkg"
+	"github.com/nmtan2001/chat-quality-agent/ai"
+	"github.com/nmtan2001/chat-quality-agent/config"
+	"github.com/nmtan2001/chat-quality-agent/db"
+	"github.com/nmtan2001/chat-quality-agent/db/models"
+	"github.com/nmtan2001/chat-quality-agent/pkg"
 )
 
 // SmartMockProvider analyzes the transcript and returns appropriate PASS/FAIL.

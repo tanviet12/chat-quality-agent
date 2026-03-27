@@ -29,6 +29,10 @@ type Config struct {
 	// AI
 	AIMaxTokens int // max tokens for AI responses
 
+	// Guesty API
+	GuestyClientID     string
+	GuestyClientSecret string
+
 	// Environment
 	Env string // "development" | "production"
 }
@@ -47,6 +51,8 @@ func Load() (*Config, error) {
 		RateLimitPerIP:   getEnvInt("RATE_LIMIT_PER_IP", 500),
 		RateLimitPerUser: getEnvInt("RATE_LIMIT_PER_USER", 1000),
 		AIMaxTokens:      getEnvInt("AI_MAX_TOKENS", 16384),
+		GuestyClientID:   getEnv("GUESTY_CLIENT_ID", ""),
+		GuestyClientSecret: getEnv("GUESTY_CLIENT_SECRET", ""),
 		Env:              getEnv("APP_ENV", "development"),
 	}
 

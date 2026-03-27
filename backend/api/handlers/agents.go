@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vietbui/chat-quality-agent/api/middleware"
-	"github.com/vietbui/chat-quality-agent/config"
-	"github.com/vietbui/chat-quality-agent/db"
-	"github.com/vietbui/chat-quality-agent/db/models"
-	"github.com/vietbui/chat-quality-agent/engine"
+	"github.com/nmtan2001/chat-quality-agent/api/middleware"
+	"github.com/nmtan2001/chat-quality-agent/config"
+	"github.com/nmtan2001/chat-quality-agent/db"
+	"github.com/nmtan2001/chat-quality-agent/db/models"
+	"github.com/nmtan2001/chat-quality-agent/engine"
 )
 
 // verifyTenantAccess checks user has access to the specified tenant.

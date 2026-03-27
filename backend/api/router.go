@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/vietbui/chat-quality-agent/api/handlers"
-	"github.com/vietbui/chat-quality-agent/api/middleware"
-	"github.com/vietbui/chat-quality-agent/config"
-	"github.com/vietbui/chat-quality-agent/mcp"
+	"github.com/nmtan2001/chat-quality-agent/api/handlers"
+	"github.com/nmtan2001/chat-quality-agent/api/middleware"
+	"github.com/nmtan2001/chat-quality-agent/config"
+	"github.com/nmtan2001/chat-quality-agent/mcp"
 )
 
 func SetupRouter(cfg *config.Config) *gin.Engine {

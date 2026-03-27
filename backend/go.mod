@@ -1,4 +1,4 @@
-module github.com/vietbui/chat-quality-agent
+module github.com/nmtan2001/chat-quality-agent
 
 go 1.25.0
 

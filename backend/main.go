@@ -3,11 +3,12 @@ package main
 import (
 	"log"
 
-	"github.com/vietbui/chat-quality-agent/api"
-	"github.com/vietbui/chat-quality-agent/api/middleware"
-	"github.com/vietbui/chat-quality-agent/config"
-	"github.com/vietbui/chat-quality-agent/db"
-	"github.com/vietbui/chat-quality-agent/engine"
+	"github.com/nmtan2001/chat-quality-agent/api"
+	"github.com/nmtan2001/chat-quality-agent/api/middleware"
+	"github.com/nmtan2001/chat-quality-agent/config"
+	"github.com/nmtan2001/chat-quality-agent/db"
+	"github.com/nmtan2001/chat-quality-agent/engine"
+	"github.com/nmtan2001/chat-quality-agent/guesty"
 )
 
 var version = "dev"
@@ -19,6 +20,12 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Initialize Guesty client if credentials are provided
+	if cfg.GuestyClientID != "" && cfg.GuestyClientSecret != "" {
+		guesty.InitGlobalClient(cfg.GuestyClientID, cfg.GuestyClientSecret)
+		log.Printf("Guesty API client initialized")
 	}
 
 	// Initialize JWT

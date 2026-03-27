@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/vietbui/chat-quality-agent/db"
-	"github.com/vietbui/chat-quality-agent/db/models"
-	"github.com/vietbui/chat-quality-agent/pkg"
+	"github.com/nmtan2001/chat-quality-agent/db"
+	"github.com/nmtan2001/chat-quality-agent/db/models"
+	"github.com/nmtan2001/chat-quality-agent/pkg"
 )
 
 // OutputConfig represents a single output destination from job.outputs JSON.

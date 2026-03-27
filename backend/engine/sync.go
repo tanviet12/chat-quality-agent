@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/vietbui/chat-quality-agent/channels"
-	"github.com/vietbui/chat-quality-agent/config"
-	"github.com/vietbui/chat-quality-agent/db"
-	"github.com/vietbui/chat-quality-agent/db/models"
-	"github.com/vietbui/chat-quality-agent/pkg"
+	"github.com/nmtan2001/chat-quality-agent/channels"
+	"github.com/nmtan2001/chat-quality-agent/config"
+	"github.com/nmtan2001/chat-quality-agent/db"
+	"github.com/nmtan2001/chat-quality-agent/db/models"
+	"github.com/nmtan2001/chat-quality-agent/pkg"
 )
 
 // SyncEngine handles pulling messages from external channels into the database.

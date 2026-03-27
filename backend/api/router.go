@@ -72,6 +72,10 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	// Public API
 	api := r.Group("/api/v1")
 	{
+		// Public webhooks (no auth - external services call these)
+		api.POST("/webhooks/guesty", handlers.GuestyWebhook)
+		api.GET("/webhooks/guesty", handlers.GuestyWebhookChallenge)
+
 		// Initial setup (only works when no users exist)
 		api.GET("/setup/status", handlers.SetupStatus)
 		api.POST("/setup", handlers.Setup)

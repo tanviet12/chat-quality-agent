@@ -96,6 +96,16 @@
         <!-- Language -->
         <LanguageSwitcher v-if="!isRail" />
 
+        <!-- Docs + Version -->
+        <div v-if="!isRail" class="mt-2 d-flex align-center">
+          <v-btn size="small" variant="text" href="https://tanviet12.github.io/chat-quality-agent/guide/introduction.html" target="_blank" prepend-icon="mdi-file-document" class="text-none">Docs</v-btn>
+          <v-spacer />
+          <v-chip size="small" variant="tonal" :color="updateInfo?.has_update ? 'warning' : 'success'" href="https://tanviet12.github.io/chat-quality-agent/changelog.html" target="_blank" style="cursor: pointer;">
+            <v-icon start size="10" icon="mdi-circle" />
+            {{ updateInfo?.current || 'dev' }}
+          </v-chip>
+        </div>
+
         <!-- User info with clickable avatar for profile -->
         <div v-if="!isRail" class="mt-2 d-flex align-center">
           <v-avatar size="32" color="primary" class="mr-2 cursor-pointer" style="cursor: pointer" @click="profileDialog = true">
@@ -128,6 +138,30 @@
   <v-main class="bg-background">
     <v-container fluid class="pa-4 pa-md-6">
       <OnboardingWizard />
+
+      <!-- Update notification banner -->
+      <v-alert
+        v-if="updateInfo && updateInfo.has_update && !isUpdateDismissed"
+        type="info"
+        variant="tonal"
+        class="mb-4"
+        closable
+        @click:close="dismissUpdate"
+      >
+        <div class="d-flex align-center flex-wrap">
+          <span class="text-body-2">Có phiên bản mới: <a href="https://tanviet12.github.io/chat-quality-agent/changelog.html" target="_blank" class="text-primary font-weight-bold">{{ updateInfo.latest }}</a></span>
+          <span class="text-caption text-grey mx-2">|</span>
+          <span class="text-caption text-grey">Hiện tại: {{ updateInfo.current }}</span>
+          <span class="text-caption text-grey mx-2">|</span>
+          <span class="text-caption"><a href="https://tanviet12.github.io/chat-quality-agent/guide/installation.html#tu-%C4%91ong-cap-nhat-tuy-chon" target="_blank" class="text-primary">Cài Watchtower</a> để tự động cập nhật.</span>
+        </div>
+        <div class="d-flex align-center mt-2 ga-1">
+          <span class="text-caption text-grey">Cập nhật thủ công:</span>
+          <code class="text-caption pa-1 rounded" style="user-select: all; background: #f5f5f5; color: #333; border: 1px solid #ddd;">cd /opt/cqa && docker compose pull && docker compose up -d</code>
+          <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="primary" @click="copyUpdateCmd" />
+        </div>
+      </v-alert>
+
       <slot />
     </v-container>
   </v-main>
@@ -207,9 +241,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { clearTenantCache } from '../router'
+import { clearTenantCache, permissionDeniedMsg, clearPermissionDeniedMsg } from '../router'
 import { useTheme, useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
@@ -224,7 +258,7 @@ const theme = useTheme()
 const { mdAndUp } = useDisplay()
 const { t } = useI18n()
 
-const drawer = ref(true)
+const drawer = ref(mdAndUp.value)
 const rail = ref(false)
 const isDark = computed(() => theme.global.current.value.dark)
 const isRail = computed(() => mdAndUp.value && rail.value)
@@ -241,9 +275,18 @@ const currentTenantInitial = computed(() => {
   return t ? t.name.charAt(0).toUpperCase() : '?'
 })
 
+// Show permission denied toast when redirected by router guard
+watch(() => route.path, () => {
+  if (permissionDeniedMsg) {
+    showSnack(permissionDeniedMsg, 'error')
+    clearPermissionDeniedMsg()
+  }
+})
+
 watch(tenantId, async (id) => {
   if (id) {
     currentTenantId.value = id
+    authStore.fetchTenantPermissions(id)
     if (!tenants.value.length) {
       try {
         const { data } = await api.get('/tenants')
@@ -256,11 +299,14 @@ watch(tenantId, async (id) => {
 const CREATE_TENANT_ID = '__create__'
 const MANAGE_TENANT_ID = '__manage__'
 
-const tenantSelectItems = computed(() => [
-  ...tenants.value,
-  { id: CREATE_TENANT_ID, name: '+ Thêm công ty', slug: '' },
-  { id: MANAGE_TENANT_ID, name: 'Quản lý công ty', slug: '' },
-])
+const tenantSelectItems = computed(() => {
+  const items = [...tenants.value]
+  if (authStore.user?.is_admin) {
+    items.push({ id: CREATE_TENANT_ID, name: '+ Thêm công ty', slug: '' })
+  }
+  items.push({ id: MANAGE_TENANT_ID, name: 'Quản lý công ty', slug: '' })
+  return items
+})
 
 function onTenantSelect(newId: string) {
   if (newId === CREATE_TENANT_ID) {
@@ -315,6 +361,34 @@ const snackColor = ref('success')
 const profileForm = ref({ name: '' })
 const passwordForm = ref({ currentPassword: '', newPassword: '', confirmPassword: '' })
 
+// Version update check
+const updateInfo = ref<any>(null)
+const isUpdateDismissed = computed(() => {
+  if (!updateInfo.value?.latest) return true
+  return localStorage.getItem('cqa_dismissed_version') === updateInfo.value.latest
+})
+function dismissUpdate() {
+  if (updateInfo.value?.latest) localStorage.setItem('cqa_dismissed_version', updateInfo.value.latest)
+}
+function copyUpdateCmd() {
+  navigator.clipboard.writeText('cd /opt/cqa && docker compose pull && docker compose up -d')
+}
+onMounted(async () => {
+  // Check cached version info (max 1 hour)
+  const cached = localStorage.getItem('cqa_version_check')
+  if (cached) {
+    try {
+      const { data, ts } = JSON.parse(cached)
+      if (Date.now() - ts < 3600000) { updateInfo.value = data; return }
+    } catch { /* ignore */ }
+  }
+  try {
+    const { data } = await api.get('/version/check')
+    updateInfo.value = data
+    localStorage.setItem('cqa_version_check', JSON.stringify({ data, ts: Date.now() }))
+  } catch { /* ignore */ }
+})
+
 // Load profile data when dialog opens
 watch(profileDialog, (val) => {
   if (val && authStore.user) {
@@ -326,18 +400,19 @@ watch(profileDialog, (val) => {
 const navItems = computed(() => {
   if (!tenantId.value) return []
   const base = `/${tenantId.value}`
-  return [
-    { icon: 'mdi-view-dashboard', label: 'nav_home', route: base, exact: true },
-    { icon: 'mdi-message-text', label: 'nav_channels', route: `${base}/channels`, exact: false },
-    { icon: 'mdi-forum', label: 'nav_messages', route: `${base}/messages`, exact: false },
-    { icon: 'mdi-robot', label: 'nav_jobs', route: `${base}/jobs`, exact: false },
-    { icon: 'mdi-text-box-search', label: 'activity_logs', route: `${base}/activity-logs`, exact: false },
-    { icon: 'mdi-currency-usd', label: 'cost_logs', route: `${base}/cost-logs`, exact: false },
-    { icon: 'mdi-bell-ring', label: 'nav_notification_logs', route: `${base}/notifications`, exact: false },
-    { icon: 'mdi-connection', label: 'nav_mcp', route: `${base}/mcp`, exact: false },
-    { icon: 'mdi-account-group', label: 'nav_users', route: `${base}/users`, exact: false },
-    { icon: 'mdi-cog', label: 'nav_settings', route: `${base}/settings`, exact: false },
+  const all = [
+    { icon: 'mdi-view-dashboard', label: 'nav_home', route: base, exact: true, perm: null },
+    { icon: 'mdi-connection', label: 'nav_channels', route: `${base}/channels`, exact: false, perm: 'channels' },
+    { icon: 'mdi-forum', label: 'nav_messages', route: `${base}/messages`, exact: false, perm: 'messages' },
+    { icon: 'mdi-robot', label: 'nav_jobs', route: `${base}/jobs`, exact: false, perm: 'jobs' },
+    { icon: 'mdi-text-box-search', label: 'activity_logs', route: `${base}/activity-logs`, exact: false, perm: 'settings' },
+    { icon: 'mdi-currency-usd', label: 'cost_logs', route: `${base}/cost-logs`, exact: false, perm: 'settings' },
+    { icon: 'mdi-bell-ring', label: 'nav_notification_logs', route: `${base}/notifications`, exact: false, perm: 'jobs' },
+    { icon: 'mdi-api', label: 'nav_mcp', route: `${base}/mcp`, exact: false, perm: 'settings' },
+    { icon: 'mdi-account-group', label: 'nav_users', route: `${base}/users`, exact: false, perm: 'settings' },
+    { icon: 'mdi-cog', label: 'nav_settings', route: `${base}/settings`, exact: false, perm: 'settings' },
   ]
+  return all.filter(item => !item.perm || authStore.canView(item.perm))
 })
 
 const userInitials = computed(() => {

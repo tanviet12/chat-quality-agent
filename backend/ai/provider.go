@@ -36,9 +36,9 @@ func CalculateCostUSD(provider, model string, inputTokens, outputTokens int) flo
 		switch model {
 		case "claude-haiku-4-5-20251001", "claude-haiku-4-5":
 			inputRate, outputRate = 0.80, 4.00
-		case "claude-sonnet-4-6", "claude-sonnet-4-20250514":
+		case "claude-sonnet-4-6", "claude-sonnet-4-20250514", "claude-sonnet-4-5-20250929":
 			inputRate, outputRate = 3.00, 15.00
-		case "claude-opus-4":
+		case "claude-opus-4", "claude-opus-4-6":
 			inputRate, outputRate = 15.00, 75.00
 		default:
 			inputRate, outputRate = 3.00, 15.00 // default sonnet pricing

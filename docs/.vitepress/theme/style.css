@@ -1,3 +1,17 @@
+/* Hero image */
+.VPHero .VPImage {
+  max-width: 520px;
+  max-height: 380px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 768px) {
+  .VPHero .image-container {
+    display: none;
+  }
+}
+
 .medium-zoom-overlay {
   z-index: 999;
 }

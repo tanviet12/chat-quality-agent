@@ -6,7 +6,7 @@
     </div>
 
     <v-card class="pa-6">
-      <v-stepper v-model="step" :items="stepItems" alt-labels hide-actions>
+      <v-stepper v-model="step" :items="stepItems" :alt-labels="mdAndUp" hide-actions>
         <template #[`item.1`]>
           <StepType v-model:form="form" />
         </template>
@@ -54,6 +54,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useJobStore } from '../../stores/jobs'
 import StepType from '../../components/JobWizard/StepType.vue'
@@ -65,6 +66,7 @@ import StepConfirm from '../../components/JobWizard/StepConfirm.vue'
 
 const route = useRoute()
 const router = useRouter()
+const { mdAndUp } = useDisplay()
 const { t } = useI18n()
 const jobStore = useJobStore()
 
@@ -117,7 +119,7 @@ const form = ref({
   rules_content: '',
   rules_config: '[]',
   skip_conditions: '',
-  ai_provider: 'claude',
+  ai_provider: '',
   ai_model: '',
   outputs: '[]',
   outputs_validated: true,

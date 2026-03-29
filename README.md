@@ -143,6 +143,10 @@ Xem đầy đủ trong [.env.example](.env.example).
 | ![Chi tiết tin nhắn](https://raw.githubusercontent.com/tanviet12/chat-quality-agent/main/docs/public/screenshots/chi-tiet-tin-nhan-va-danh-gia.png) | ![Chi tiết kênh](https://raw.githubusercontent.com/tanviet12/chat-quality-agent/main/docs/public/screenshots/chi-tiet-kenh-chat.png) |
 | Chi tiết tin nhắn + đánh giá | Chi tiết kênh chat |
 
+## Changelog
+
+Xem lịch sử thay đổi tại: **[CHANGELOG.md](CHANGELOG.md)**
+
 ## Tài liệu
 
 Xem tài liệu chi tiết tại: **[https://tanviet12.github.io/chat-quality-agent/](https://tanviet12.github.io/chat-quality-agent/)**

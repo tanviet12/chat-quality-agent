@@ -1,5 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import api from '../api'
+
+// Permission denied message (set by guard, consumed by layout)
+export let permissionDeniedMsg = ''
+export function clearPermissionDeniedMsg() { permissionDeniedMsg = '' }
 
 // Cache validated tenant IDs to avoid repeated API calls
 const validTenantIds = new Set<string>()
@@ -38,66 +43,79 @@ const router = createRouter({
           path: 'channels',
           name: 'channels',
           component: () => import('../views/Channels.vue'),
+          meta: { perm: 'channels' },
         },
         {
           path: 'channels/:channelId',
           name: 'channel-detail',
           component: () => import('../views/Channels/ChannelDetail.vue'),
+          meta: { perm: 'channels' },
         },
         {
           path: 'messages',
           name: 'messages',
           component: () => import('../views/Messages.vue'),
+          meta: { perm: 'messages' },
         },
         {
           path: 'jobs',
           name: 'jobs',
           component: () => import('../views/Jobs/JobList.vue'),
+          meta: { perm: 'jobs' },
         },
         {
           path: 'jobs/create',
           name: 'job-create',
           component: () => import('../views/Jobs/JobCreate.vue'),
+          meta: { perm: 'jobs', permAction: 'w' },
         },
         {
           path: 'jobs/:jobId',
           name: 'job-detail',
           component: () => import('../views/Jobs/JobDetail.vue'),
+          meta: { perm: 'jobs' },
         },
         {
           path: 'jobs/:jobId/edit',
           name: 'job-edit',
           component: () => import('../views/Jobs/JobEdit.vue'),
+          meta: { perm: 'jobs', permAction: 'w' },
         },
         {
           path: 'activity-logs',
           name: 'activity-logs',
           component: () => import('../views/ActivityLogs.vue'),
+          meta: { perm: 'settings' },
         },
         {
           path: 'cost-logs',
           name: 'cost-logs',
           component: () => import('../views/CostLogs.vue'),
+          meta: { perm: 'settings' },
         },
         {
           path: 'notifications',
           name: 'notifications',
           component: () => import('../views/NotificationLogs.vue'),
+          meta: { perm: 'jobs' },
         },
         {
           path: 'mcp',
           name: 'mcp',
           component: () => import('../views/MCPConnections.vue'),
+          meta: { perm: 'settings' },
         },
         {
           path: 'users',
           name: 'users',
           component: () => import('../views/Users.vue'),
+          meta: { perm: 'settings' },
         },
         {
           path: 'settings',
           name: 'settings',
           component: () => import('../views/Settings.vue'),
+          meta: { perm: 'settings' },
         },
       ],
     },
@@ -156,6 +174,22 @@ router.beforeEach(async (to) => {
         validTenantIds.add(tid)
       } catch {
         return { name: 'not-found' }
+      }
+    }
+
+    // Check permission for tenant routes
+    const perm = to.meta.perm as string | undefined
+    if (perm) {
+      const authStore = useAuthStore()
+      // Ensure permissions are loaded
+      if (!authStore.tenantPerms.role) {
+        await authStore.fetchTenantPermissions(tid)
+      }
+      const action = (to.meta.permAction as string) || 'r'
+      const allowed = action === 'w' ? authStore.canEdit(perm) : authStore.canView(perm)
+      if (!allowed) {
+        permissionDeniedMsg = 'Bạn không có quyền truy cập trang này'
+        return { path: `/${tid}` }
       }
     }
   }

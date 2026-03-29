@@ -10,10 +10,43 @@ interface User {
   language: string
 }
 
+interface TenantPermissions {
+  role: string
+  permissions: Record<string, string> // { channels: "rw", messages: "r", jobs: "", settings: "" }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const accessToken = ref(localStorage.getItem('cqa_access_token') || '')
   const isAuthenticated = computed(() => !!accessToken.value)
+  const tenantPerms = ref<TenantPermissions>({ role: '', permissions: {} })
+
+  function canView(resource: string): boolean {
+    const role = tenantPerms.value.role
+    if (role === 'owner' || role === 'admin') return true
+    const perm = tenantPerms.value.permissions[resource] || ''
+    return perm.includes('r')
+  }
+
+  function canEdit(resource: string): boolean {
+    const role = tenantPerms.value.role
+    if (role === 'owner' || role === 'admin') return true
+    const perm = tenantPerms.value.permissions[resource] || ''
+    return perm.includes('w')
+  }
+
+  async function fetchTenantPermissions(tenantId: string) {
+    try {
+      const { data } = await api.get(`/tenants/${tenantId}/me`)
+      let perms: Record<string, string> = {}
+      if (data.permissions) {
+        try { perms = JSON.parse(data.permissions) } catch { perms = {} }
+      }
+      tenantPerms.value = { role: data.role || '', permissions: perms }
+    } catch {
+      tenantPerms.value = { role: '', permissions: {} }
+    }
+  }
 
   async function login(email: string, password: string) {
     const { data } = await api.post('/auth/login', { email, password })
@@ -50,5 +83,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('cqa_refresh_token') // cleanup legacy
   }
 
-  return { user, accessToken, isAuthenticated, login, register, fetchProfile, updateProfile, logout }
+  return { user, accessToken, isAuthenticated, tenantPerms, canView, canEdit, fetchTenantPermissions, login, register, fetchProfile, updateProfile, logout }
 })

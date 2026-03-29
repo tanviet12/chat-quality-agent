@@ -80,7 +80,7 @@ func (d *Dispatcher) SendJobResults(ctx context.Context, job models.Job, run mod
 
 		// Use custom template if configured
 		body := defaultBody
-		link := fmt.Sprintf("%s/%s/jobs/%s", d.getBaseURL(), job.TenantID, job.ID)
+		link := fmt.Sprintf("%s/%s/jobs/%s", d.getBaseURL(job.TenantID), job.TenantID, job.ID)
 		if output.Template == "custom" && output.CustomTemplate != "" {
 			body = d.renderCustomTemplate(output.CustomTemplate, job.Name, total, passed, failed, issues, defaultBody, link)
 		}
@@ -197,10 +197,17 @@ func trimSpace(s string) string {
 	return s[start:end]
 }
 
-func (d *Dispatcher) getBaseURL() string {
+func (d *Dispatcher) getBaseURL(tenantID string) string {
+	// Priority 1: tenant setting from DB
+	var setting models.AppSetting
+	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "app_url").First(&setting).Error; err == nil && setting.ValuePlain != "" {
+		return setting.ValuePlain
+	}
+	// Priority 2: environment variable
 	if u := os.Getenv("APP_URL"); u != "" {
 		return u
 	}
+	// Priority 3: fallback
 	return "http://localhost:8080"
 }
 

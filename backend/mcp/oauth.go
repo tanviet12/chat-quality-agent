@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -314,7 +315,7 @@ func issueAuthCode(c *gin.Context, client models.OAuthClient, userID, redirectUR
 	// Redirect back with auth code
 	redirectURL := fmt.Sprintf("%s?code=%s", redirectURI, code)
 	if state != "" {
-		redirectURL += "&state=" + state
+		redirectURL += "&state=" + url.QueryEscape(state)
 	}
 	c.Redirect(http.StatusFound, redirectURL)
 }
@@ -541,20 +542,22 @@ func ListMCPClients(c *gin.Context) {
 	db.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&clients)
 
 	type clientResponse struct {
-		ID        string    `json:"id"`
-		ClientID  string    `json:"client_id"`
-		Name      string    `json:"name"`
-		Scopes    string    `json:"scopes"`
-		CreatedAt time.Time `json:"created_at"`
+		ID           string    `json:"id"`
+		ClientID     string    `json:"client_id"`
+		Name         string    `json:"name"`
+		RedirectURIs string    `json:"redirect_uris"`
+		Scopes       string    `json:"scopes"`
+		CreatedAt    time.Time `json:"created_at"`
 	}
 	results := make([]clientResponse, len(clients))
 	for i, cl := range clients {
 		results[i] = clientResponse{
-			ID:        cl.ID,
-			ClientID:  cl.ClientID,
-			Name:      cl.Name,
-			Scopes:    cl.Scopes,
-			CreatedAt: cl.CreatedAt,
+			ID:           cl.ID,
+			ClientID:     cl.ClientID,
+			Name:         cl.Name,
+			RedirectURIs: cl.RedirectURIs,
+			Scopes:       cl.Scopes,
+			CreatedAt:    cl.CreatedAt,
 		}
 	}
 	c.JSON(http.StatusOK, results)
@@ -565,6 +568,7 @@ func CreateMCPClient(c *gin.Context) {
 	var req struct {
 		Name         string   `json:"name" binding:"required"`
 		RedirectURIs []string `json:"redirect_uris"`
+		Scopes       []string `json:"scopes"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
@@ -585,13 +589,26 @@ func CreateMCPClient(c *gin.Context) {
 		redirectURIsJSON = string(b)
 	}
 
+	// Validate and set scopes (only allow "read" and "write")
+	allowedScopes := map[string]bool{"read": true, "write": true}
+	validScopes := []string{}
+	for _, s := range req.Scopes {
+		if allowedScopes[s] {
+			validScopes = append(validScopes, s)
+		}
+	}
+	if len(validScopes) == 0 {
+		validScopes = []string{"read", "write"}
+	}
+	scopesJSON, _ := json.Marshal(validScopes)
+
 	client := models.OAuthClient{
 		ID:               pkg.NewUUID(),
 		ClientID:         clientID,
 		ClientSecretHash: string(secretHash),
 		Name:             req.Name,
 		RedirectURIs:     redirectURIsJSON,
-		Scopes:           `["read","write"]`,
+		Scopes:           string(scopesJSON),
 		UserID:           userID,
 		CreatedAt:        time.Now(),
 	}

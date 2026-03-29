@@ -11,6 +11,7 @@ import (
 	"github.com/nmtan2001/chat-quality-agent/api/middleware"
 	"github.com/nmtan2001/chat-quality-agent/db"
 	"github.com/nmtan2001/chat-quality-agent/db/models"
+  "github.com/nmtan2001/chat-quality-agent/pkg"
 )
 
 func ListConversations(c *gin.Context) {
@@ -157,7 +158,7 @@ func GetConversationMessages(c *gin.Context) {
 			Content:     msg.Content,
 			ContentType: msg.ContentType,
 			Attachments: msg.Attachments,
-			SentAt:      msg.SentAt.Format("2006-01-02T15:04:05Z"),
+			SentAt:      pkg.ToVN(msg.SentAt).Format("2006-01-02T15:04:05+07:00"),
 		}
 	}
 
@@ -399,11 +400,11 @@ func exportMessagesTXT(c *gin.Context, conversations []models.Conversation, msgM
 		}
 
 		sb.WriteString(fmt.Sprintf("--- Cuộc chat #%d: %s ---\n", i+1, conv.CustomerName))
-		sb.WriteString(fmt.Sprintf("Ngày: %s | Số tin nhắn: %d\n", firstMsg.Format("02/01/2006 15:04"), len(msgs)))
+		sb.WriteString(fmt.Sprintf("Ngày: %s | Số tin nhắn: %d\n", pkg.ToVN(firstMsg).Format("02/01/2006 15:04"), len(msgs)))
 		sb.WriteString("\n")
 
 		for _, msg := range msgs {
-			ts := msg.SentAt.Format("15:04")
+			ts := pkg.ToVN(msg.SentAt).Format("15:04")
 			name := msg.SenderName
 			if name == "" {
 				if msg.SenderType == "agent" {
@@ -443,7 +444,7 @@ func exportMessagesCSV(c *gin.Context, conversations []models.Conversation, msgM
 		msgs := msgMap[conv.ID]
 		var convDate string
 		if len(msgs) > 0 {
-			convDate = msgs[0].SentAt.Format("02/01/2006")
+			convDate = pkg.ToVN(msgs[0].SentAt).Format("02/01/2006")
 		}
 
 		for _, msg := range msgs {
@@ -464,7 +465,7 @@ func exportMessagesCSV(c *gin.Context, conversations []models.Conversation, msgM
 				escape(convDate),
 				escape(name),
 				escape(msg.SenderType),
-				escape(msg.SentAt.Format("15:04")),
+				escape(pkg.ToVN(msg.SentAt).Format("15:04")),
 				escape(content),
 			))
 		}

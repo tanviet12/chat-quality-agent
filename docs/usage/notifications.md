@@ -18,9 +18,10 @@ Thông báo được cấu hình trong bước 4 khi [tạo công việc](/usage
 2. **Lấy Group ID**:
    - Tạo group Telegram (hoặc dùng group có sẵn)
    - Thêm bot vào group
-   - Gửi 1 tin nhắn bất kỳ trong group
-   - Chat với [@RawDataBot](https://t.me/RawDataBot), forward tin nhắn từ group
-   - RawDataBot trả về **Group ID** (số âm, ví dụ `-1001234567890`)
+   - Mở [Telegram Web](https://web.telegram.org) trên trình duyệt
+   - Vào group cần lấy ID
+   - Xem URL trên thanh địa chỉ, ví dụ: `https://web.telegram.org/k/#-1001234567890`
+   - **Group ID** = số sau dấu `#` (bao gồm dấu `-`, ví dụ `-1001234567890`)
 
 3. **Nhập vào CQA**:
    - Bot Token: paste token từ BotFather
@@ -35,6 +36,10 @@ Bot sẽ gửi tin nhắn vào group gồm:
 - Tổng kết (số cuộc chat, đạt/không đạt)
 - Danh sách vấn đề phát hiện (nếu có)
 - Link xem chi tiết trên CQA
+
+::: info Cấu hình link
+Link trong thông báo dùng URL từ **Cài đặt > Chung > [URL ứng dụng](/usage/general-settings#url-ung-dung)**. Nếu chưa cấu hình, link sẽ trỏ về localhost.
+:::
 
 ## Email
 
@@ -79,7 +84,7 @@ Bạn có thể viết template riêng thay vì dùng mặc định:
 | `failed` | Số cuộc chat không đạt |
 | `issues` | Số vấn đề phát hiện |
 | `content` | Nội dung đánh giá chi tiết |
-| `link` | URL xem kết quả trên hệ thống |
+| `link` | URL xem kết quả trên hệ thống (dùng [URL ứng dụng](/usage/general-settings#url-ung-dung) đã cấu hình) |
 
 Cú pháp dùng trong template: bọc tên biến trong dấu ngoặc nhọn kép, ví dụ: `{` `{job_name}` `}`
 

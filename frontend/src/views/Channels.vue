@@ -2,7 +2,7 @@
   <div>
     <div class="d-flex align-center justify-space-between mb-6">
       <h1 class="text-h5 font-weight-bold">{{ $t('channels') }}</h1>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="showDialog = true">
+      <v-btn v-if="authStore.canEdit('channels')" color="primary" prepend-icon="mdi-plus" @click="showDialog = true">
         {{ $t('connect_channel') }}
       </v-btn>
     </div>
@@ -193,12 +193,14 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useChannelStore } from '../stores/channels'
+import { useAuthStore } from '../stores/auth'
 import api from '../api'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const channelStore = useChannelStore()
+const authStore = useAuthStore()
 const tenantId = computed(() => route.params.tenantId as string)
 
 const showDialog = ref(false)
@@ -247,15 +249,26 @@ async function createAndAuthZalo() {
     })
     showDialog.value = false
 
-    // Step 2: Redirect to Zalo OAuth authorize URL
+    // Step 2: Use backend reauth API to get signed OAuth URL (with HMAC state)
     const channelId = created?.id || created?.data?.id
+    if (channelId && newChannel.channel_type === 'zalo_oa') {
+      try {
+        const { data: reauthData } = await api.post(`/tenants/${tenantId.value}/channels/${channelId}/reauth`)
+        const redirectUrl = reauthData?.redirect_url
+        if (redirectUrl) {
+          window.location.href = redirectUrl
+          return
+        }
+      } catch {
+        // Fallback: redirect to channel detail
+        router.push(`/${tenantId.value}/channels/${channelId}`)
+        return
+      }
+    }
+    showSnack(t('success'), 'success')
+    channelStore.fetchChannels(tenantId.value)
     if (channelId) {
-      const callbackUrl = `${window.location.origin}/api/v1/channels/zalo/callback`
-      const authUrl = `https://oauth.zaloapp.com/v4/oa/permission?app_id=${newChannel.creds.app_id}&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${tenantId.value}:${channelId}`
-      window.location.href = authUrl
-    } else {
-      showSnack(t('success'), 'success')
-      channelStore.fetchChannels(tenantId.value)
+      router.push(`/${tenantId.value}/channels/${channelId}`)
     }
 
     newChannel.name = ''

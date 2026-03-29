@@ -17,13 +17,18 @@ Vào menu **Kênh chat** ở sidebar, bấm **Thêm kênh**.
 - Tài khoản Zalo Developers ([developers.zalo.me](https://developers.zalo.me))
 - Một Zalo OA đang hoạt động, bạn phải là **quản trị viên (admin)** của OA
 - Một tài khoản Zalo cá nhân (dùng để đăng nhập)
-- **CQA phải có tên miền + SSL** (Zalo yêu cầu callback URL là HTTPS). Xem [Tên miền & SSL](/guide/domain-ssl)
+- **Deploy trên VPS**: cần tên miền + SSL (Zalo yêu cầu callback HTTPS). Xem [Tên miền & SSL](/guide/domain-ssl)
+- **Test trên localhost**: Zalo cho phép callback `http://localhost`, không cần SSL
 
-### Bước 1: Bật SSL cho CQA
+### Bước 1: Bật SSL cho CQA (bỏ qua nếu dùng localhost)
 
-Zalo yêu cầu callback URL phải là HTTPS. Nếu chưa bật SSL, hãy cấu hình trước:
+Khi deploy trên VPS, Zalo yêu cầu callback URL phải là HTTPS:
 - Trỏ domain về IP VPS (ví dụ `cqa.yourdomain.com`)
 - Bật SSL trong `.env` (xem [Tên miền & SSL](/guide/domain-ssl))
+
+::: tip Dùng localhost?
+Nếu chạy CQA trên máy cá nhân (`http://localhost`), bỏ qua bước này. Zalo hỗ trợ callback localhost.
+:::
 
 ### Bước 2: Tạo ứng dụng trên Zalo Developers
 

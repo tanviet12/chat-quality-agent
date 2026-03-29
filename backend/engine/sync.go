@@ -142,6 +142,11 @@ func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) er
 	db.LogActivity(channel.TenantID, "", "system", "sync.completed", "channel", channel.ID,
 		fmt.Sprintf("Sync '%s': %d conversations, %d messages", channel.Name, len(conversations), totalMessages), "", "")
 
+	// Trigger after-sync jobs for this channel
+	if sched := GetDefaultScheduler(); sched != nil {
+		sched.TriggerAfterSyncJobs(channel.TenantID, channel.ID)
+	}
+
 	return s.updateSyncStatus(channel.ID, "success", "")
 }
 

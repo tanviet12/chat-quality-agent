@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,9 @@ import (
 	"github.com/nmtan2001/chat-quality-agent/pkg"
 )
 
+// jobCancelFuncs stores cancel functions for running jobs, keyed by job ID
+var jobCancelFuncs sync.Map
+
 type CreateJobRequest struct {
 	Name            string          `json:"name" binding:"required,min=2,max=255"`
 	Description     string          `json:"description"`
@@ -29,7 +33,7 @@ type CreateJobRequest struct {
 	RulesContent    string          `json:"rules_content"`
 	RulesConfig     json.RawMessage `json:"rules_config"`
 	SkipConditions  string          `json:"skip_conditions"`
-	AIProvider      string          `json:"ai_provider" binding:"required,oneof=claude gemini"`
+	AIProvider      string          `json:"ai_provider" binding:"omitempty,oneof=claude gemini"`
 	AIModel         string          `json:"ai_model"`
 	Outputs         json.RawMessage `json:"outputs" binding:"required"`
 	OutputSchedule  string          `json:"output_schedule" binding:"required,oneof=instant scheduled cron none"`
@@ -92,6 +96,13 @@ func CreateJob(c *gin.Context) {
 		return
 	}
 
+	// Reload cron jobs if this is a scheduled job
+	if job.ScheduleType == "cron" {
+		if sched := engine.GetDefaultScheduler(); sched != nil {
+			sched.ReloadJobs()
+		}
+	}
+
 	c.JSON(http.StatusCreated, job)
 }
 
@@ -112,8 +123,9 @@ func GetJob(c *gin.Context) {
 var allowedJobUpdateFields = map[string]bool{
 	"name": true, "description": true, "type": true, "status": true,
 	"input_channel_ids": true, "outputs": true, "rules_config": true,
+	"rules_content": true, "skip_conditions": true,
 	"ai_provider": true, "ai_model": true, "ai_system_prompt": true,
-	"schedule_cron": true, "schedule_enabled": true,
+	"schedule_type": true, "schedule_cron": true, "schedule_enabled": true,
 	"date_from": true, "date_to": true, "max_conversations": true,
 }
 
@@ -154,6 +166,18 @@ func UpdateJob(c *gin.Context) {
 		return
 	}
 
+	// Reload cron jobs if schedule changed
+	if _, ok := req["schedule_type"]; ok {
+		if sched := engine.GetDefaultScheduler(); sched != nil {
+			sched.ReloadJobs()
+		}
+	}
+	if _, ok := req["schedule_cron"]; ok {
+		if sched := engine.GetDefaultScheduler(); sched != nil {
+			sched.ReloadJobs()
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 
@@ -178,6 +202,13 @@ func DeleteJob(c *gin.Context) {
 	db.DB.Where("job_id = ? AND tenant_id = ?", jobID, tenantID).Delete(&models.AIUsageLog{})
 	db.DB.Where("job_id = ? AND tenant_id = ?", jobID, tenantID).Delete(&models.NotificationLog{})
 	db.DB.Where("id = ? AND tenant_id = ?", jobID, tenantID).Delete(&models.Job{})
+
+	// Reload cron jobs after deletion
+	if job.ScheduleType == "cron" {
+		if sched := engine.GetDefaultScheduler(); sched != nil {
+			sched.ReloadJobs()
+		}
+	}
 
 	db.LogActivity(tenantID, middleware.GetUserID(c), middleware.GetUserEmail(c), "job.delete", "job", jobID, "Deleted job: "+job.Name, "", c.ClientIP())
 
@@ -259,7 +290,10 @@ func TestRunJob(c *gin.Context) {
 		}()
 		cfg, _ := config.Load()
 		analyzer := engine.NewAnalyzer(cfg)
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		jobCancelFuncs.Store(job.ID, cancel)
+		defer jobCancelFuncs.Delete(job.ID)
 		if _, err := analyzer.RunJobWithLimit(ctx, job, 3); err != nil {
 			log.Printf("[test-run] error for job %s: %v", job.Name, err)
 		}
@@ -306,7 +340,10 @@ func TriggerJob(c *gin.Context) {
 		}()
 		cfg, _ := config.Load()
 		analyzer := engine.NewAnalyzer(cfg)
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		jobCancelFuncs.Store(job.ID, cancel)
+		defer jobCancelFuncs.Delete(job.ID)
 		var err error
 		switch mode {
 		case "unanalyzed":
@@ -322,6 +359,38 @@ func TriggerJob(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{"message": "job_triggered"})
+}
+
+func CancelJob(c *gin.Context) {
+	tenantID := middleware.GetTenantID(c)
+	userID := middleware.GetUserID(c)
+	jobID := c.Param("jobId")
+
+	var job models.Job
+	if err := db.DB.Where("id = ? AND tenant_id = ?", jobID, tenantID).First(&job).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job_not_found"})
+		return
+	}
+
+	// Cancel the running context
+	if cancelFn, ok := jobCancelFuncs.Load(job.ID); ok {
+		cancelFn.(context.CancelFunc)()
+		jobCancelFuncs.Delete(job.ID)
+	}
+
+	// Mark running job_runs as cancelled
+	finishedAt := time.Now()
+	db.DB.Model(&models.JobRun{}).
+		Where("job_id = ? AND status = ?", job.ID, "running").
+		Updates(map[string]interface{}{
+			"status":        "cancelled",
+			"finished_at":   &finishedAt,
+			"error_message": "Cancelled by user",
+		})
+
+	log.Printf("[security] job cancelled: user=%s job=%s tenant=%s ip=%s", userID, jobID, tenantID, c.ClientIP())
+
+	c.JSON(http.StatusOK, gin.H{"message": "job_cancelled"})
 }
 
 func ListJobRuns(c *gin.Context) {

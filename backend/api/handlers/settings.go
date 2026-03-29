@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -61,6 +62,7 @@ func SaveAISettings(c *gin.Context) {
 		Provider  string `json:"provider" binding:"required,oneof=claude gemini"`
 		APIKey    string `json:"api_key" binding:"required"`
 		Model     string `json:"model"`
+		BaseURL   string `json:"base_url"`
 		BatchMode string `json:"batch_mode"`
 		BatchSize string `json:"batch_size"`
 	}
@@ -77,6 +79,14 @@ func SaveAISettings(c *gin.Context) {
 	// Save model (plain)
 	if req.Model != "" {
 		upsertSetting(tenantID, "ai_model", req.Model, nil)
+	}
+
+	// Save base URL (plain, optional — empty string clears it)
+	if req.BaseURL != "" {
+		upsertSetting(tenantID, "ai_base_url", req.BaseURL, nil)
+	} else {
+		// Explicitly clear: delete the setting if empty
+		db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_base_url").Delete(&models.AppSetting{})
 	}
 
 	// Save API key (encrypted)
@@ -157,6 +167,7 @@ func SaveGeneralSettings(c *gin.Context) {
 		Timezone       string  `json:"timezone"`
 		Language       string  `json:"language"`
 		ExchangeRate   float64 `json:"exchange_rate_vnd"`
+		AppURL         string  `json:"app_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
@@ -181,6 +192,10 @@ func SaveGeneralSettings(c *gin.Context) {
 	if req.ExchangeRate > 0 {
 		upsertSetting(tenantID, "exchange_rate_vnd", fmt.Sprintf("%.0f", req.ExchangeRate), nil)
 	}
+
+	// Strip trailing slash from app URL
+	appURL := strings.TrimRight(req.AppURL, "/")
+	upsertSetting(tenantID, "app_url", appURL, nil)
 
 	c.JSON(http.StatusOK, gin.H{"message": "saved"})
 }

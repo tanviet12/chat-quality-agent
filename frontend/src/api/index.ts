@@ -14,6 +14,9 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Shared refresh promise to prevent multiple concurrent refresh calls
+let refreshPromise: Promise<string> | null = null
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -21,10 +24,20 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
       try {
-        // Refresh token sent automatically via HttpOnly cookie
-        const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true })
-        localStorage.setItem('cqa_access_token', data.access_token)
-        originalRequest.headers.Authorization = `Bearer ${data.access_token}`
+        // If a refresh is already in-flight, wait for it instead of firing another
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post('/api/v1/auth/refresh', {}, { withCredentials: true })
+            .then(({ data }) => {
+              localStorage.setItem('cqa_access_token', data.access_token)
+              return data.access_token
+            })
+            .finally(() => {
+              refreshPromise = null
+            })
+        }
+        const newToken = await refreshPromise
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
         return api(originalRequest)
       } catch {
         localStorage.removeItem('cqa_access_token')

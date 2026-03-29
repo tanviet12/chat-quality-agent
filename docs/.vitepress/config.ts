@@ -23,6 +23,7 @@ export default defineConfig({
         items: [
           { text: 'Giới thiệu', link: '/guide/introduction' },
           { text: 'Cài đặt', link: '/guide/installation' },
+          { text: 'Cập nhật phiên bản', link: '/guide/updates' },
           { text: 'Tên miền & SSL', link: '/guide/domain-ssl' },
           { text: 'Thiết lập ban đầu', link: '/guide/initial-setup' },
         ],
@@ -62,6 +63,7 @@ export default defineConfig({
         text: 'Hỗ trợ',
         items: [
           { text: 'FAQ & Xử lý lỗi', link: '/faq' },
+          { text: 'Changelog', link: '/changelog' },
         ],
       },
     ],
@@ -76,7 +78,7 @@ export default defineConfig({
 
     footer: {
       message: 'Phát hành theo giấy phép MIT',
-      copyright: 'Copyright 2025 SePay',
+      copyright: 'Copyright 2026 SePay',
     },
   },
 })

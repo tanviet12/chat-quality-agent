@@ -13,6 +13,7 @@
           <tr>
             <th>{{ $t('name') }}</th>
             <th>{{ $t('client_id') }}</th>
+            <th>Redirect URIs</th>
             <th>{{ $t('scopes') }}</th>
             <th>Tạo lúc</th>
             <th>{{ $t('actions') }}</th>
@@ -23,7 +24,13 @@
             <td class="font-weight-medium">{{ client.name }}</td>
             <td class="text-body-2 font-mono">{{ client.client_id }}</td>
             <td>
-              <v-chip size="x-small" variant="tonal" color="primary">{{ client.scopes }}</v-chip>
+              <template v-if="parseJSON(client.redirect_uris).length">
+                <v-chip v-for="uri in parseJSON(client.redirect_uris)" :key="uri" size="x-small" variant="tonal" class="mr-1 mb-1">{{ uri }}</v-chip>
+              </template>
+              <span v-else class="text-grey text-caption">Chưa cấu hình</span>
+            </td>
+            <td>
+              <v-chip v-for="scope in parseJSON(client.scopes)" :key="scope" size="x-small" variant="tonal" color="primary" class="mr-1">{{ scope }}</v-chip>
             </td>
             <td class="text-caption">{{ new Date(client.created_at).toLocaleString('vi-VN') }}</td>
             <td>
@@ -42,12 +49,35 @@
     </div>
 
     <!-- Create Dialog -->
-    <v-dialog v-model="createDialog" max-width="520">
+    <v-dialog v-model="createDialog" max-width="560">
       <v-card class="pa-6">
         <v-card-title>{{ $t('create_connection') }}</v-card-title>
-        <v-text-field v-model="newName" :label="$t('name')" class="mt-4 mb-3" hint="Tên hiển thị cho kết nối này" persistent-hint />
 
-        <div v-if="generatedSecret" class="bg-grey-lighten-4 pa-4 rounded mb-3">
+        <v-text-field v-model="newName" :label="$t('name')" class="mt-4" hint="Tên hiển thị cho kết nối này" persistent-hint />
+
+        <v-combobox
+          v-model="newRedirectURIs"
+          label="Redirect URIs"
+          multiple
+          chips
+          closable-chips
+          class="mt-4"
+          hint="Nhập URL callback rồi nhấn Enter (vd: https://claude.ai/oauth/callback)"
+          persistent-hint
+        />
+
+        <v-select
+          v-model="newScopes"
+          :items="scopeOptions"
+          label="Phân quyền (Scopes)"
+          multiple
+          chips
+          class="mt-4"
+          hint="Chọn quyền truy cập cho kết nối"
+          persistent-hint
+        />
+
+        <div v-if="generatedSecret" class="bg-grey-lighten-4 pa-4 rounded mt-4">
           <div class="text-caption text-grey mb-1">{{ $t('client_id') }}</div>
           <div class="font-mono text-body-2 mb-3">{{ generatedClientId }}</div>
           <div class="text-caption text-grey mb-1">{{ $t('client_secret') }}</div>
@@ -61,7 +91,7 @@
           </v-btn>
         </div>
 
-        <v-card-actions class="px-0">
+        <v-card-actions class="px-0 mt-4">
           <v-spacer />
           <v-btn variant="text" @click="closeDialog">{{ generatedSecret ? 'Đóng' : $t('cancel') }}</v-btn>
           <v-btn v-if="!generatedSecret" color="primary" :loading="creating" :disabled="!newName" @click="generateClient">{{ $t('create') }}</v-btn>
@@ -80,6 +110,9 @@ import api from '../api'
 const clients = ref<any[]>([])
 const createDialog = ref(false)
 const newName = ref('')
+const newRedirectURIs = ref<string[]>([])
+const newScopes = ref<string[]>(['read', 'write'])
+const scopeOptions = ['read', 'write']
 const generatedClientId = ref('')
 const generatedSecret = ref('')
 const creating = ref(false)
@@ -87,6 +120,14 @@ const snackbar = ref(false)
 const snackText = ref('')
 
 onMounted(loadClients)
+
+function parseJSON(val: string): string[] {
+  try {
+    return JSON.parse(val) || []
+  } catch {
+    return []
+  }
+}
 
 async function loadClients() {
   try {
@@ -98,11 +139,17 @@ async function loadClients() {
 async function generateClient() {
   creating.value = true
   try {
-    const { data } = await api.post('/mcp/clients', { name: newName.value })
+    const { data } = await api.post('/mcp/clients', {
+      name: newName.value,
+      redirect_uris: newRedirectURIs.value,
+      scopes: newScopes.value,
+    })
     generatedClientId.value = data.client_id
     generatedSecret.value = data.client_secret
     await loadClients()
     newName.value = ''
+    newRedirectURIs.value = []
+    newScopes.value = ['read', 'write']
   } catch (err: any) {
     snackText.value = err.response?.data?.error || 'Lỗi tạo kết nối'
     snackbar.value = true

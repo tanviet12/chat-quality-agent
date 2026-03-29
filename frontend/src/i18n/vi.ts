@@ -120,6 +120,7 @@ export default {
   ai_config: 'Cấu hình AI',
   analysis_settings: 'Phân tích',
   ai_provider: 'Nhà cung cấp AI',
+  job_uses_global_ai_settings: 'Công việc sử dụng cấu hình AI từ Cài đặt.',
   api_key: 'API Key',
   general: 'Chung',
   security: 'Bảo mật',

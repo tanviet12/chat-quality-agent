@@ -2,7 +2,7 @@
   <div>
     <h1 class="text-h5 font-weight-bold mb-6">{{ $t('activity_logs') }}</h1>
 
-    <v-card>
+    <v-card style="overflow-x: auto;">
       <v-card-text class="d-flex ga-3 pb-0">
         <v-select
           v-model="filterAction"

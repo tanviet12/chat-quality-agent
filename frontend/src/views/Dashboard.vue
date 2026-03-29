@@ -2,12 +2,10 @@
   <div>
     <!-- Demo Import Banner -->
     <v-alert v-if="demoStatus && !demoStatus.has_data" type="info" variant="tonal" class="mb-4" prominent>
-      <div class="d-flex align-center">
-        <div class="flex-grow-1">
-          <div class="text-subtitle-1 font-weight-bold mb-1">Chào mừng! Bắt đầu với dữ liệu demo</div>
-          <div class="text-body-2">Hệ thống chưa có dữ liệu. Nhập dữ liệu demo để trải nghiệm ngay cách AI đánh giá chất lượng CSKH và phân loại cuộc chat tự động. Dữ liệu giả lập ~220 cuộc chat từ SePay Coffee.</div>
-        </div>
-        <v-btn color="primary" variant="flat" class="ml-4" :loading="importingDemo" @click="importDemo">
+      <div>
+        <div class="text-subtitle-1 font-weight-bold mb-1">Chào mừng! Bắt đầu với dữ liệu demo</div>
+        <div class="text-body-2 mb-3">Hệ thống chưa có dữ liệu. Nhập dữ liệu demo để trải nghiệm ngay cách AI đánh giá chất lượng CSKH và phân loại cuộc chat tự động. Dữ liệu giả lập ~220 cuộc chat từ SePay Coffee.</div>
+        <v-btn color="primary" variant="flat" :loading="importingDemo" @click="importDemo">
           <v-icon start>mdi-database-import</v-icon>
           Nhập dữ liệu demo
         </v-btn>
@@ -44,17 +42,27 @@
       </v-card>
     </v-dialog>
 
-    <div class="d-flex align-center mb-6">
-      <h1 class="text-h5 font-weight-bold">{{ $t('dashboard') }}</h1>
-      <v-spacer />
-      <v-chip-group v-model="datePreset" class="mr-3">
+    <div class="d-flex flex-wrap align-center mb-4 ga-2">
+      <h1 class="text-h5 font-weight-bold d-none d-md-block">{{ $t('dashboard') }}</h1>
+      <v-spacer class="d-none d-md-block" />
+      <v-chip-group v-model="datePreset">
         <v-chip v-for="p in datePresets" :key="p.value" :value="p.value" size="small" variant="outlined" @click="applyPreset(p.value)">
           {{ p.label }}
         </v-chip>
       </v-chip-group>
-      <v-text-field v-model="dateFrom" type="date" density="compact" hide-details style="max-width: 160px" class="mr-2" @change="loadDashboard" />
-      <v-text-field v-model="dateTo" type="date" density="compact" hide-details style="max-width: 160px" @change="loadDashboard" />
+      <!-- Desktop: inline with chips -->
+      <v-text-field v-model="dateFrom" type="date" density="compact" hide-details style="max-width: 160px" class="d-none d-md-block" @change="loadDashboard" />
+      <v-text-field v-model="dateTo" type="date" density="compact" hide-details style="max-width: 160px" class="d-none d-md-block" @change="loadDashboard" />
     </div>
+    <!-- Mobile: separate row -->
+    <v-row dense class="mb-4 d-md-none">
+      <v-col cols="6">
+        <v-text-field v-model="dateFrom" type="date" density="compact" hide-details @change="loadDashboard" />
+      </v-col>
+      <v-col cols="6">
+        <v-text-field v-model="dateTo" type="date" density="compact" hide-details @change="loadDashboard" />
+      </v-col>
+    </v-row>
 
     <!-- Stat cards -->
     <v-row class="mb-6">
@@ -102,7 +110,7 @@
           <div class="d-flex justify-space-between align-center">
             <div>
               <div class="text-body-2 text-grey">{{ $t('ai_cost') }}</div>
-              <div class="text-h5 font-weight-bold mt-1">{{ Math.round(costToday * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h5 font-weight-bold mt-1">{{ Math.round(costToday * exchangeRate).toLocaleString('vi-VN') }}đ</div>
             </div>
             <v-icon color="warning" size="32" class="opacity-50">mdi-currency-usd</v-icon>
           </div>
@@ -162,11 +170,11 @@
           <div class="d-flex ga-4 mb-3">
             <div>
               <div class="text-caption text-grey">{{ $t('cost_today') }}</div>
-              <div class="text-h6 font-weight-bold">{{ Math.round(costToday * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h6 font-weight-bold">{{ Math.round(costToday * exchangeRate).toLocaleString('vi-VN') }}đ</div>
             </div>
             <div>
               <div class="text-caption text-grey">{{ $t('cost_this_month') }}</div>
-              <div class="text-h6 font-weight-bold">{{ Math.round(costMonth * 26000).toLocaleString('vi-VN') }}đ</div>
+              <div class="text-h6 font-weight-bold">{{ Math.round(costMonth * exchangeRate).toLocaleString('vi-VN') }}đ</div>
             </div>
           </div>
 
@@ -183,7 +191,7 @@
               <tr v-for="day in costByDay.slice(0, 7)" :key="day.date">
                 <td>{{ formatDisplayDate(day.date) }}</td>
                 <td class="text-right text-caption">{{ (day.input_tokens + day.output_tokens).toLocaleString() }}</td>
-                <td class="text-right">{{ Math.round(day.total_cost * 26000).toLocaleString('vi-VN') }}đ</td>
+                <td class="text-right">{{ Math.round(day.total_cost * exchangeRate).toLocaleString('vi-VN') }}đ</td>
               </tr>
             </tbody>
           </v-table>
@@ -270,6 +278,7 @@ const recentActivity = computed(() => {
 const costToday = ref(0)
 const costMonth = ref(0)
 const costByDay = ref<any[]>([])
+const exchangeRate = ref(26000)
 const services = ref([
   { name: 'API Server', ok: true },
   { name: 'Database', ok: true },
@@ -381,7 +390,7 @@ const costChartData = computed(() => ({
   labels: [...costByDay.value].reverse().map(d => formatChartDate(d.date)),
   datasets: [{
     label: 'Chi phí (VNĐ)',
-    data: [...costByDay.value].reverse().map(d => Math.round(d.total_cost * 26000)),
+    data: [...costByDay.value].reverse().map(d => Math.round(d.total_cost * exchangeRate.value)),
     borderColor: '#FFA726',
     backgroundColor: 'rgba(255,167,38,0.1)',
     fill: true,
@@ -418,7 +427,7 @@ async function loadDashboard() {
     costToday.value = data.cost_today || 0
     costMonth.value = data.cost_this_month || 0
     costByDay.value = data.cost_by_day || []
-    // Cost stats shown in AI Cost card
+    exchangeRate.value = data.exchange_rate || 26000
 
     qcAlerts.value = data.qc_alerts || []
     classRecent.value = data.classification_recent || []

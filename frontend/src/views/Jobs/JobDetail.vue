@@ -1,33 +1,33 @@
 <template>
   <div>
     <!-- Header -->
-    <div class="d-flex align-center mb-2 flex-wrap ga-2">
-      <v-btn icon="mdi-arrow-left" variant="text" :to="`/${tenantId}/jobs`" />
-      <h1 class="text-h5 font-weight-bold ml-2">{{ job?.name || '...' }}</h1>
-      <v-spacer />
-      <v-btn variant="outlined" prepend-icon="mdi-pencil" size="small" :to="`/${tenantId}/jobs/${jobId}/edit`" class="mr-2">
-        {{ $t('edit') }}
-      </v-btn>
-      <v-btn variant="outlined" color="primary" prepend-icon="mdi-test-tube" size="small" :loading="testRunning" class="mr-2" @click="testRun">
-        Chạy thử (3 hội thoại)
-      </v-btn>
-      <v-btn color="primary" prepend-icon="mdi-play" size="small" :loading="triggerRunning" @click="openRunDialog">
-        {{ $t('run_now') }}
-      </v-btn>
-    </div>
-    <div v-if="job" class="ml-12 mb-4">
-      <div class="d-flex flex-wrap ga-2">
-        <v-chip size="small" :color="job.job_type === 'qc_analysis' ? 'primary' : 'secondary'" variant="tonal">
-          {{ job.job_type === 'qc_analysis' ? $t('job_qc') : $t('job_classification') }}
-        </v-chip>
-        <v-chip size="small" variant="tonal">{{ job.ai_provider }} / {{ job.ai_model }}</v-chip>
-        <v-chip size="small" :color="job.is_active ? 'success' : 'grey'" variant="tonal">
-          {{ job.is_active ? $t('active') : $t('inactive') }}
-        </v-chip>
-        <v-chip size="small" variant="tonal" prepend-icon="mdi-clock-outline">
-          {{ formatSchedule(job.schedule_type, job.schedule_cron) }}
-        </v-chip>
-      </div>
+    <div class="d-flex align-center mb-4">
+      <v-btn icon="mdi-arrow-left" variant="text" size="small" :to="`/${tenantId}/jobs`" />
+      <h1 class="text-subtitle-1 text-md-h5 font-weight-bold ml-1 flex-grow-1" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ job?.name || '...' }}</h1>
+      <template v-if="authStore.canEdit('jobs')">
+        <v-tooltip v-if="!mdAndUp" text="Sửa" location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" variant="outlined" icon="mdi-pencil" size="small" :to="`/${tenantId}/jobs/${jobId}/edit`" class="ml-1" />
+          </template>
+        </v-tooltip>
+        <v-btn v-else variant="outlined" prepend-icon="mdi-pencil" size="small" :to="`/${tenantId}/jobs/${jobId}/edit`" class="ml-2">{{ $t('edit') }}</v-btn>
+
+        <v-tooltip v-if="!mdAndUp" text="Chạy thử" location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" variant="outlined" color="primary" icon="mdi-test-tube" size="small" :loading="isJobRunning" :disabled="isJobRunning" class="ml-1" @click="testRun" />
+          </template>
+        </v-tooltip>
+        <v-btn v-else variant="outlined" color="primary" prepend-icon="mdi-test-tube" size="small" :loading="isJobRunning" :disabled="isJobRunning" class="ml-2" @click="testRun">Chạy thử (3 hội thoại)</v-btn>
+
+        <v-tooltip v-if="!mdAndUp" text="Chạy ngay" location="bottom">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" color="primary" icon="mdi-play" size="small" :disabled="isJobRunning" class="ml-1" @click="openRunDialog" />
+          </template>
+        </v-tooltip>
+        <v-btn v-else color="primary" prepend-icon="mdi-play" size="small" :disabled="isJobRunning" class="ml-2" @click="openRunDialog">{{ $t('run_now') }}</v-btn>
+
+        <v-btn v-if="isJobRunning" color="error" variant="outlined" prepend-icon="mdi-stop" size="small" class="ml-2" :loading="cancelling" @click="cancelJob">{{ mdAndUp ? 'Dừng' : '' }}</v-btn>
+      </template>
     </div>
 
     <!-- Run options dialog -->
@@ -121,7 +121,7 @@
         </v-col>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">{{ $t('ai_model') }}</div>
-          <div class="text-body-2">{{ job.ai_provider }} / {{ job.ai_model }}</div>
+          <div class="text-body-2">{{ tenantAIProvider }} / {{ tenantAIModel }}</div>
         </v-col>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">{{ $t('job_wizard_step_analysis_schedule') }}</div>
@@ -470,7 +470,18 @@
                           <v-spacer />
                           <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                         </div>
-                        <div class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                        <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                        <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
+                        <div v-if="hasAttachments(msg)" class="mt-1">
+                          <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
+                            <div v-if="isImageAttachment(att)" class="mb-1">
+                              <img v-if="authImageCache[getAttachmentUrl(att)] && authImageCache[getAttachmentUrl(att)] !== 'loading'" :src="authImageCache[getAttachmentUrl(att)]" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = authImageCache[getAttachmentUrl(att)]" />
+                              <v-progress-circular v-else-if="authImageCache[getAttachmentUrl(att)] === 'loading'" indeterminate size="20" width="2" class="ma-2" />
+                            </div>
+                            <v-chip v-else size="x-small" variant="tonal" class="mr-1" :href="getAttachmentUrl(att)" target="_blank"><v-icon start size="12">mdi-paperclip</v-icon>{{ att.name || 'File' }}</v-chip>
+                          </template>
+                        </div>
+                        <div v-if="!msg.content && !hasAttachments(msg) && msg.content_type !== 'text'" class="text-caption font-italic">[{{ msg.content_type || 'File' }}]</div>
                       </div>
                     </div>
                   </div>
@@ -619,7 +630,18 @@
                       <v-spacer />
                       <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                     </div>
-                    <div class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                    <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                    <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
+                    <div v-if="hasAttachments(msg)" class="mt-1">
+                      <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
+                        <div v-if="isImageAttachment(att)" class="mb-1">
+                          <img v-if="authImageCache[getAttachmentUrl(att)] && authImageCache[getAttachmentUrl(att)] !== 'loading'" :src="authImageCache[getAttachmentUrl(att)]" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = authImageCache[getAttachmentUrl(att)]" />
+                          <v-progress-circular v-else-if="authImageCache[getAttachmentUrl(att)] === 'loading'" indeterminate size="20" width="2" class="ma-2" />
+                        </div>
+                        <v-chip v-else size="x-small" variant="tonal" class="mr-1" :href="getAttachmentUrl(att)" target="_blank"><v-icon start size="12">mdi-paperclip</v-icon>{{ att.name || 'File' }}</v-chip>
+                      </template>
+                    </div>
+                    <div v-if="!msg.content && !hasAttachments(msg) && msg.content_type !== 'text'" class="text-caption font-italic">[{{ msg.content_type || 'File' }}]</div>
                   </div>
                 </div>
               </div>
@@ -694,13 +716,20 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <!-- Lightbox overlay for image zoom -->
+    <div v-if="lightboxSrc" class="lightbox-overlay" @click="lightboxSrc = ''">
+      <img :src="lightboxSrc" class="lightbox-img" @click.stop />
+      <v-btn icon="mdi-close" variant="flat" color="white" size="small" class="lightbox-close" @click="lightboxSrc = ''" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useJobStore, type JobResult } from '../../stores/jobs'
+import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Filler, Legend } from 'chart.js'
@@ -708,10 +737,14 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement,
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Filler, Legend)
 
 const route = useRoute()
+const { mdAndUp } = useDisplay()
 const jobStore = useJobStore()
+const authStore = useAuthStore()
 const tenantId = computed(() => route.params.tenantId as string)
 const jobId = computed(() => route.params.jobId as string)
 const job = ref<Record<string, any> | null>(null)
+const tenantAIProvider = ref('')
+const tenantAIModel = ref('')
 const isClassification = computed(() => job.value?.job_type === 'classification')
 
 const TAG_COLORS = ['#7E57C2', '#1E88E5', '#00897B', '#FB8C00', '#D81B60', '#00ACC1', '#3949AB', '#E64A19', '#7CB342', '#6D4C41']
@@ -721,7 +754,9 @@ function tagColor(tag: string): string {
   return idx >= 0 ? TAG_COLORS[idx % TAG_COLORS.length] : TAG_COLORS[0]
 }
 const selectedRunId = ref<string | null>(null)
-const testRunning = ref(false)
+const cancelling = ref(false)
+const isJobRunning = computed(() => jobStore.jobRuns?.[0]?.status === 'running')
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 const expandedMap = ref<Record<string, boolean>>({})
 const runDialog = ref(false)
 const clearResultsDialog = ref(false)
@@ -778,6 +813,52 @@ const paginatedResults = computed(() => {
 
 // Chat messages cache
 const chatMessages = ref<Record<string, any[]>>({})
+const lightboxSrc = ref('')
+const authImageCache = ref<Record<string, string>>({})
+
+function hasAttachments(msg: any) {
+  if (!msg.attachments || msg.attachments === '[]' || msg.attachments === 'null') return false
+  try { const arr = JSON.parse(msg.attachments); return Array.isArray(arr) && arr.length > 0 } catch { return false }
+}
+function parseAttachments(msg: any) {
+  try { return JSON.parse(msg.attachments) || [] } catch { return [] }
+}
+function isImageAttachment(att: any): boolean {
+  if (!att.type) return false
+  const t = att.type.toLowerCase()
+  return t.startsWith('image') || t === 'photo' || t === 'gif' || t === 'sticker'
+}
+function getAttachmentUrl(att: any): string {
+  if (att.local_path) return `/api/v1/files/${att.local_path}`
+  return att.url || ''
+}
+async function loadAuthImage(url: string) {
+  if (!url || authImageCache.value[url]) return
+  if (!url.startsWith('/api/')) { authImageCache.value[url] = url; return }
+  authImageCache.value[url] = 'loading'
+  try {
+    const token = localStorage.getItem('cqa_access_token')
+    const resp = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+    if (resp.ok) { const blob = await resp.blob(); authImageCache.value[url] = URL.createObjectURL(blob) }
+    else { delete authImageCache.value[url] }
+  } catch { delete authImageCache.value[url] }
+}
+function loadImagesForMessages(msgs: any[]) {
+  for (const msg of msgs) {
+    if (msg.attachments) {
+      try {
+        const atts = typeof msg.attachments === 'string' ? JSON.parse(msg.attachments) : msg.attachments
+        if (!Array.isArray(atts)) continue
+        for (const att of atts) { if (isImageAttachment(att)) { const url = getAttachmentUrl(att); if (url) loadAuthImage(url) } }
+      } catch { continue }
+    }
+  }
+}
+watch(chatMessages, (val) => { for (const msgs of Object.values(val)) { if (msgs?.length) loadImagesForMessages(msgs) } }, { deep: true })
+onUnmounted(() => {
+  stopPolling()
+  for (const url of Object.values(authImageCache.value)) { if (url?.startsWith('blob:')) URL.revokeObjectURL(url) }
+})
 
 // Parsed job fields
 const parsedOutputs = computed(() => {
@@ -1004,17 +1085,42 @@ onMounted(async () => {
   if (job.value?.job_type === 'classification') resultFilter.value = 'classified'
   await jobStore.fetchJobRuns(tenantId.value, jobId.value)
   await jobStore.fetchAllJobResults(tenantId.value, jobId.value)
+  // Load tenant AI settings (jobs use global settings)
+  try {
+    const { data } = await api.get(`/tenants/${tenantId.value}/settings`)
+    tenantAIProvider.value = data?.settings?.ai_provider || 'claude'
+    tenantAIModel.value = data?.settings?.ai_model || ''
+  } catch { /* fallback empty */ }
+  // Auto-start polling if job is currently running (e.g. after F5)
+  if (isJobRunning.value) {
+    startPolling()
+  }
 })
 
-async function pollUntilComplete() {
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000))
-    await jobStore.fetchJobRuns(tenantId.value, jobId.value)
-    const latestRun = jobStore.jobRuns[0]
-    if (!latestRun || latestRun.status !== 'running') break
+function startPolling() {
+  stopPolling()
+  async function tick() {
+    try {
+      await jobStore.fetchJobRuns(tenantId.value, jobId.value)
+      if (!isJobRunning.value) {
+        // Job finished — fetch final results
+        await jobStore.fetchAllJobResults(tenantId.value, jobId.value)
+        job.value = await jobStore.fetchJob(tenantId.value, jobId.value)
+        stopPolling()
+        return
+      }
+    } catch { /* ignore network errors, retry next tick */ }
+    pollTimer = setTimeout(tick, 3000)
   }
-  await jobStore.fetchAllJobResults(tenantId.value, jobId.value)
-  job.value = await jobStore.fetchJob(tenantId.value, jobId.value)
+  // Small delay before first poll to let backend create the run record
+  pollTimer = setTimeout(tick, 2000)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
 }
 
 const currentRunProgress = computed(() => {
@@ -1056,23 +1162,17 @@ async function openRunDialog() {
 
 async function testRun() {
   if (!(await checkAIConfigured())) return
-  testRunning.value = true
   try {
     await jobStore.testRunJob(tenantId.value, jobId.value)
-    await pollUntilComplete()
+    startPolling()
   } catch {
     await jobStore.fetchJobRuns(tenantId.value, jobId.value)
-  } finally {
-    testRunning.value = false
   }
 }
-
-const triggerRunning = ref(false)
 
 async function confirmRun() {
   if (runConditionalError.value) return
   runDialog.value = false
-  triggerRunning.value = true
   try {
     const params: Record<string, string> = {}
     if (runMode.value === 'conditional') {
@@ -1081,12 +1181,21 @@ async function confirmRun() {
     }
     if (runLimit.value && runLimit.value > 0) params.limit = String(runLimit.value)
     await jobStore.triggerJob(tenantId.value, jobId.value, runMode.value, params)
-    await pollUntilComplete()
+    startPolling()
   } catch {
     await jobStore.fetchJobRuns(tenantId.value, jobId.value)
-  } finally {
-    triggerRunning.value = false
   }
+}
+
+async function cancelJob() {
+  cancelling.value = true
+  try {
+    await api.post(`/tenants/${tenantId.value}/jobs/${jobId.value}/cancel`)
+    stopPolling()
+    await jobStore.fetchJobRuns(tenantId.value, jobId.value)
+    await jobStore.fetchAllJobResults(tenantId.value, jobId.value)
+  } catch { /* ignore */ }
+  finally { cancelling.value = false }
 }
 
 async function loadResults(runId: string) {
@@ -1207,3 +1316,9 @@ function classificationSummary(group: any): string {
   return group.review || '—'
 }
 </script>
+
+<style scoped>
+.lightbox-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; cursor: pointer; }
+.lightbox-img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; cursor: default; }
+.lightbox-close { position: fixed; top: 16px; right: 16px; }
+</style>

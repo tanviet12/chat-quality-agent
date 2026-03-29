@@ -2,7 +2,7 @@
   <div>
     <div class="d-flex align-center justify-space-between mb-6">
       <h1 class="text-h5 font-weight-bold">{{ $t('jobs') }}</h1>
-      <v-btn color="primary" prepend-icon="mdi-plus" :to="`/${tenantId}/jobs/create`">
+      <v-btn v-if="authStore.canEdit('jobs')" color="primary" prepend-icon="mdi-plus" :to="`/${tenantId}/jobs/create`">
         {{ $t('create_job') }}
       </v-btn>
     </div>
@@ -59,9 +59,11 @@
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useJobStore } from '../../stores/jobs'
+import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
 const jobStore = useJobStore()
+const authStore = useAuthStore()
 const tenantId = computed(() => route.params.tenantId as string)
 
 onMounted(() => jobStore.fetchJobs(tenantId.value))

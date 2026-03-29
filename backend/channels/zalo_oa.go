@@ -280,9 +280,39 @@ func (z *ZaloOAAdapter) FetchMessages(ctx context.Context, conversationID string
 				RawData:     msg,
 			}
 
-			// Check for attachments
+			// Check for attachments (image, file, sticker, gif, etc.)
 			if msgType, ok := msg["type"].(string); ok && msgType != "text" {
 				syncedMsg.ContentType = msgType
+
+				// Extract attachment URL from Zalo message
+				aURL := ""
+				aName := ""
+				if u, ok := msg["url"].(string); ok && u != "" {
+					aURL = u
+				} else if u, ok := msg["thumb"].(string); ok && u != "" {
+					aURL = u
+				}
+				// For file type: check links array
+				if links, ok := msg["links"].([]interface{}); ok && len(links) > 0 {
+					if link, ok := links[0].(map[string]interface{}); ok {
+						if u, ok := link["url"].(string); ok {
+							aURL = u
+						}
+						if n, ok := link["name"].(string); ok {
+							aName = n
+						}
+					}
+				}
+				if aURL != "" {
+					if aName == "" {
+						aName = fmt.Sprintf("%s-%s", msgType, msgID)
+					}
+					syncedMsg.Attachments = append(syncedMsg.Attachments, Attachment{
+						Type: msgType,
+						URL:  aURL,
+						Name: aName,
+					})
+				}
 			}
 
 			messages = append(messages, syncedMsg)

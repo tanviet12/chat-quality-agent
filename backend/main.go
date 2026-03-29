@@ -15,6 +15,7 @@ var version = "dev"
 
 func main() {
 	log.Printf("Chat Quality Agent %s", version)
+	handlers.AppVersion = version
 
 	// Load config
 	cfg, err := config.Load()
@@ -47,6 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create scheduler: %v", err)
 	}
+	engine.SetDefaultScheduler(scheduler)
 	scheduler.Start()
 	defer scheduler.Stop()
 

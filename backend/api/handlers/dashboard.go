@@ -116,6 +116,15 @@ func GetDashboard(c *gin.Context) {
 		Order("date ASC").
 		Scan(&messagesByDay)
 
+	// Exchange rate from tenant settings
+	exchangeRate := 26000.0
+	var rateSetting models.AppSetting
+	if db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "exchange_rate_vnd").First(&rateSetting).Error == nil && rateSetting.ValuePlain != "" {
+		if r, err := strconv.ParseFloat(rateSetting.ValuePlain, 64); err == nil && r > 0 {
+			exchangeRate = r
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"total_conversations":      totalConversations,
 		"active_channels":          activeChannels,
@@ -128,6 +137,7 @@ func GetDashboard(c *gin.Context) {
 		"cost_this_month":          costMonth,
 		"cost_by_day":              costByDay,
 		"messages_by_day":          messagesByDay,
+		"exchange_rate":            exchangeRate,
 	})
 }
 

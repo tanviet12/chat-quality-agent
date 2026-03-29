@@ -52,7 +52,7 @@ install_docker() {
       chmod a+r /etc/apt/keyrings/docker.gpg
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${OS_ID} $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
       apt-get update -qq
-      apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-compose-plugin
       ;;
     centos|rhel|rocky|almalinux|ol)
       yum install -y yum-utils
@@ -88,7 +88,7 @@ install_docker() {
       elif echo "$OS_ID_LIKE" | grep -qE "debian|ubuntu"; then
         echo -e "${YELLOW}Phat hien distro tuong tu Debian, thu cai bang apt...${NC}"
         apt-get update -qq
-        apt-get install -y -qq docker.io docker-compose-plugin 2>/dev/null || apt-get install -y -qq docker.io
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io docker-compose-plugin 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io
       else
         echo -e "${RED}Khong ho tro tu dong cai Docker cho: ${OS_ID}${NC}"
         echo -e "${YELLOW}Vui long cai Docker thu cong: https://docs.docker.com/engine/install/${NC}"
@@ -114,7 +114,7 @@ install_compose() {
   detect_os
   case "$OS_ID" in
     ubuntu|debian)
-      apt-get install -y -qq docker-compose-plugin 2>/dev/null && return
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker-compose-plugin 2>/dev/null && return
       ;;
     centos|rhel|rocky|almalinux|ol|fedora)
       yum install -y docker-compose-plugin 2>/dev/null && return

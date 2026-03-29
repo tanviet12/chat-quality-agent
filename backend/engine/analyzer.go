@@ -122,6 +122,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 
 	// Determine time range
 	isTestRun := maxConversations > 0
+	if isTestRun {
+		excludeAnalyzed = true
+	}
 	var since time.Time
 	if sinceOverride != nil {
 		since = *sinceOverride
@@ -166,7 +169,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	if maxConversations > 0 {
 		q = q.Limit(maxConversations)
 	}
-	q.Find(&conversations)
+	if err := q.Find(&conversations).Error; err != nil {
+		return a.failRun(&run, fmt.Errorf("fetch conversations: %w", err))
+	}
 
 	log.Printf("[analyzer] job %s: channelIDs=%v, sinceZero=%v, excludeAnalyzed=%v, fullRerun=%v, found %d conversations",
 		job.Name, channelIDs, since.IsZero(), excludeAnalyzed, fullRerun, len(conversations))
@@ -175,7 +180,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	initialSummary, _ := json.Marshal(map[string]interface{}{
 		"conversations_found": len(conversations),
 	})
-	db.DB.Model(&run).Update("summary", string(initialSummary))
+	if err := db.DB.Model(&run).Update("summary", string(initialSummary)).Error; err != nil {
+		log.Printf("[analyzer] DB update error (initial summary): %v", err)
+	}
 
 	// Check batch mode setting (default: enabled with batch size 5)
 	batchMode := true
@@ -191,6 +198,10 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 			batchSize = n
 		}
 	}
+	// Safety net: prevent infinite loop if batchSize somehow becomes 0
+	if batchSize < 1 {
+		batchSize = 5
+	}
 
 	issuesFound := 0
 	passCount := 0
@@ -202,6 +213,14 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	} else {
 
 	for _, conv := range conversations {
+		// Check if context cancelled (timeout or manual cancel)
+		select {
+		case <-ctx.Done():
+			log.Printf("[analyzer] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
+			goto complete
+		default:
+		}
+
 		// Load messages
 		var messages []models.Message
 		mq := db.DB.Where("conversation_id = ?", conv.ID)
@@ -221,7 +240,7 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 				SenderType: m.SenderType,
 				SenderName: m.SenderName,
 				Content:    m.Content,
-				SentAt:     m.SentAt.Format("15:04"),
+				SentAt:     pkg.ToVN(m.SentAt).Format("15:04"),
 			}
 		}
 		transcript := ai.FormatChatTranscript(chatMessages)
@@ -253,7 +272,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 				"conversations_errors":   errorCount,
 				"issues_found":           issuesFound,
 			})
-			db.DB.Model(&run).Update("summary", string(errProgressJSON))
+			if err := db.DB.Model(&run).Update("summary", string(errProgressJSON)).Error; err != nil {
+				log.Printf("[analyzer] DB update error (error progress): %v", err)
+			}
 			continue
 		}
 		analyzedCount++
@@ -292,11 +313,14 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 			"conversations_errors":   errorCount,
 			"issues_found":           issuesFound,
 		})
-		db.DB.Model(&run).Update("summary", string(progressJSON))
+		if err := db.DB.Model(&run).Update("summary", string(progressJSON)).Error; err != nil {
+			log.Printf("[analyzer] DB update error (progress): %v", err)
+		}
 	}
 
 	} // end else (non-batch mode)
 
+complete:
 	// Complete run
 	finishedAt := time.Now()
 	summaryJSON, _ := json.Marshal(map[string]interface{}{
@@ -311,12 +335,20 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 		runStatus = "error"
 		run.ErrorMessage = fmt.Sprintf("AI errors: %d/%d conversations failed", errorCount, len(conversations))
 	}
-	db.DB.Model(&run).Updates(map[string]interface{}{
-		"status":        runStatus,
-		"finished_at":   &finishedAt,
-		"summary":       string(summaryJSON),
-		"error_message": run.ErrorMessage,
-	})
+	// Critical: final status update — retry on failure to prevent stuck "running" state
+	for retry := 0; retry < 3; retry++ {
+		if err := db.DB.Model(&run).Updates(map[string]interface{}{
+			"status":        runStatus,
+			"finished_at":   &finishedAt,
+			"summary":       string(summaryJSON),
+			"error_message": run.ErrorMessage,
+		}).Error; err != nil {
+			log.Printf("[analyzer] DB update error (final status, attempt %d): %v", retry+1, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		break
+	}
 
 	// Update job last_run (skip for test runs to avoid affecting future normal runs)
 	if !isTestRun {
@@ -381,11 +413,18 @@ func (a *Analyzer) getProvider(job models.Job) (ai.AIProvider, error) {
 		model = modelSetting.ValuePlain
 	}
 
+	// Get base URL from tenant settings (optional)
+	var baseURL string
+	var baseURLSetting models.AppSetting
+	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", job.TenantID, "ai_base_url").First(&baseURLSetting).Error; err == nil {
+		baseURL = baseURLSetting.ValuePlain
+	}
+
 	switch provider {
 	case "claude":
-		return ai.NewClaudeProvider(apiKey, model, a.cfg.AIMaxTokens), nil
+		return ai.NewClaudeProvider(apiKey, model, a.cfg.AIMaxTokens, baseURL), nil
 	case "gemini":
-		return ai.NewGeminiProvider(apiKey, model), nil
+		return ai.NewGeminiProvider(apiKey, model, baseURL), nil
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s", provider)
 	}
@@ -599,7 +638,7 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 				SenderType: m.SenderType,
 				SenderName: m.SenderName,
 				Content:    m.Content,
-				SentAt:     m.SentAt.Format("15:04"),
+				SentAt:     pkg.ToVN(m.SentAt).Format("15:04"),
 			}
 		}
 		prepared = append(prepared, convWithTranscript{
@@ -609,7 +648,17 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 	}
 
 	// Process in batches
+	consecutiveErrors := 0
 	for i := 0; i < len(prepared); i += batchSize {
+		batchHadError := false
+		// Check if context cancelled
+		select {
+		case <-ctx.Done():
+			log.Printf("[analyzer-batch] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
+			return
+		default:
+		}
+
 		end := i + batchSize
 		if end > len(prepared) {
 			end = len(prepared)
@@ -630,6 +679,7 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 		if err != nil {
 			log.Printf("[analyzer-batch] AI error for batch starting at %d: %v", i, err)
 			errorCount += len(batch)
+			batchHadError = true
 			continue
 		}
 
@@ -715,11 +765,23 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 			"conversations_errors":   errorCount,
 			"issues_found":           issuesFound,
 		})
-		db.DB.Model(&run).Update("summary", string(progressJSON))
+		if err := db.DB.Model(&run).Update("summary", string(progressJSON)).Error; err != nil {
+			log.Printf("[analyzer-batch] DB update error (progress): %v", err)
+		}
 
-		// Rate limit between batches
+		// Adaptive rate limit between batches
 		if end < len(prepared) {
-			time.Sleep(1 * time.Second)
+			if batchHadError {
+				consecutiveErrors++
+				if consecutiveErrors >= 3 {
+					time.Sleep(30 * time.Second)
+				} else {
+					time.Sleep(10 * time.Second)
+				}
+			} else {
+				consecutiveErrors = 0
+				time.Sleep(2 * time.Second)
+			}
 		}
 	}
 

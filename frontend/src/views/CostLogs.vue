@@ -17,6 +17,7 @@
         <v-text-field v-model="dateTo" type="date" label="Đến ngày" density="compact" style="max-width: 160px" @change="loadLogs" />
       </v-card-text>
 
+      <div style="overflow-x: auto;">
       <v-table density="compact">
         <thead>
           <tr>
@@ -50,6 +51,7 @@
           </tr>
         </tfoot>
       </v-table>
+      </div>
 
       <v-card-actions v-if="totalPages > 1" class="justify-center">
         <v-pagination v-model="page" :length="totalPages" density="compact" />

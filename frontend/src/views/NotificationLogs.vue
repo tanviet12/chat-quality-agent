@@ -2,7 +2,7 @@
   <div>
     <h1 class="text-h5 font-weight-bold mb-6">{{ $t('nav_notification_logs') }}</h1>
 
-    <v-card>
+    <v-card style="overflow-x: auto;">
       <v-table v-if="logs.length" density="compact">
         <thead>
           <tr>

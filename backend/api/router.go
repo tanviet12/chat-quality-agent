@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"github.com/nmtan2001/chat-quality-agent/api/handlers"
 	"github.com/nmtan2001/chat-quality-agent/api/middleware"
 	"github.com/nmtan2001/chat-quality-agent/config"
+  "github.com/nmtan2001/chat-quality-agent/db"
+  "github.com/nmtan2001/chat-quality-agent/db/models"
 	"github.com/nmtan2001/chat-quality-agent/mcp"
 )
 
@@ -37,7 +40,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		})
 	}
 
-	// Serve uploaded files (requires JWT auth)
+	// Serve uploaded files (requires JWT auth + tenant ownership)
 	r.GET("/api/v1/files/*filepath", middleware.JWTAuth(), func(c *gin.Context) {
 		fp := c.Param("filepath")
 		// Security: clean path and verify it stays within base directory
@@ -50,6 +53,22 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		// Verify resolved path is within base directory
 		if !strings.HasPrefix(fullPath, "/var/lib/cqa/files") {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		// Security: verify user belongs to the tenant owning this file
+		// Path structure: /{tenantID}/{convID}/{filename}
+		pathParts := strings.SplitN(strings.TrimPrefix(cleanPath, "/"), "/", 3)
+		if len(pathParts) < 1 || pathParts[0] == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		fileTenantID := pathParts[0]
+		userID := middleware.GetUserID(c)
+		var count int64
+		db.DB.Model(&models.UserTenant{}).Where("user_id = ? AND tenant_id = ?", userID, fileTenantID).Count(&count)
+		if count == 0 {
+			log.Printf("[security] tenant access denied: user=%s tenant=%s ip=%s path=%s", userID, fileTenantID, c.ClientIP(), fp)
+			c.JSON(http.StatusForbidden, gin.H{"error": "tenant_access_denied"})
 			return
 		}
 		c.File(fullPath)
@@ -66,7 +85,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": handlers.AppVersion})
 	})
 
 	// Public API
@@ -75,6 +94,8 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		// Public webhooks (no auth - external services call these)
 		api.POST("/webhooks/guesty", handlers.GuestyWebhook)
 		api.GET("/webhooks/guesty", handlers.GuestyWebhookChallenge)
+		// Version check (public, no auth required)
+		api.GET("/version/check", handlers.CheckVersion)
 
 		// Initial setup (only works when no users exist)
 		api.GET("/setup/status", handlers.SetupStatus)
@@ -109,44 +130,46 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 		tenant.Use(middleware.TenantContext())
 		{
 			tenant.GET("", handlers.GetTenant)
+			tenant.GET("/me", handlers.GetTenantMe)
 			tenant.PUT("", middleware.RequireRole("owner", "admin"), handlers.UpdateTenant)
 			tenant.DELETE("", middleware.RequireRole("owner"), handlers.DeleteTenant)
 
 			// Channels
-			tenant.GET("/channels", handlers.ListChannels)
-			tenant.POST("/channels", middleware.RequireRole("owner", "admin"), handlers.CreateChannel)
-			tenant.GET("/channels/:channelId", handlers.GetChannel)
-			tenant.PUT("/channels/:channelId", middleware.RequireRole("owner", "admin"), handlers.UpdateChannel)
+			tenant.GET("/channels", middleware.RequirePermission("channels", "r"), handlers.ListChannels)
+			tenant.POST("/channels", middleware.RequirePermission("channels", "w"), handlers.CreateChannel)
+			tenant.GET("/channels/:channelId", middleware.RequirePermission("channels", "r"), handlers.GetChannel)
+			tenant.PUT("/channels/:channelId", middleware.RequirePermission("channels", "w"), handlers.UpdateChannel)
 			tenant.DELETE("/channels/:channelId", middleware.RequirePermission("channels", "d"), handlers.DeleteChannel)
-			tenant.POST("/channels/:channelId/test", handlers.TestChannelConnection)
-			tenant.POST("/channels/:channelId/sync", middleware.RequireRole("owner", "admin"), handlers.SyncChannelNow)
-			tenant.POST("/channels/:channelId/reauth", middleware.RequireRole("owner", "admin"), handlers.ReauthChannel)
-			tenant.GET("/channels/:channelId/sync-history", handlers.GetChannelSyncHistory)
-			tenant.DELETE("/channels/:channelId/conversations", middleware.RequireRole("owner", "admin"), handlers.PurgeChannelConversations)
+			tenant.POST("/channels/:channelId/test", middleware.RequirePermission("channels", "r"), handlers.TestChannelConnection)
+			tenant.POST("/channels/:channelId/sync", middleware.RequirePermission("channels", "w"), handlers.SyncChannelNow)
+			tenant.POST("/channels/:channelId/reauth", middleware.RequirePermission("channels", "w"), handlers.ReauthChannel)
+			tenant.GET("/channels/:channelId/sync-history", middleware.RequirePermission("channels", "r"), handlers.GetChannelSyncHistory)
+			tenant.DELETE("/channels/:channelId/conversations", middleware.RequirePermission("channels", "d"), handlers.PurgeChannelConversations)
 
 			// Conversations & Messages
 			tenant.GET("/onboarding-status", handlers.GetOnboardingStatus)
-			tenant.GET("/conversations", handlers.ListConversations)
-			tenant.GET("/conversations/export", handlers.ExportMessages)
-			tenant.GET("/conversations/evaluated", handlers.ListEvaluatedConversations)
-			tenant.GET("/conversations/:conversationId/messages", handlers.GetConversationMessages)
-			tenant.GET("/conversations/:conversationId/evaluations", handlers.GetConversationEvaluations)
-			tenant.GET("/conversations/:conversationId/page", handlers.GetConversationPage)
+			tenant.GET("/conversations", middleware.RequirePermission("messages", "r"), handlers.ListConversations)
+			tenant.GET("/conversations/export", middleware.RequirePermission("messages", "w"), handlers.ExportMessages)
+			tenant.GET("/conversations/evaluated", middleware.RequirePermission("messages", "r"), handlers.ListEvaluatedConversations)
+			tenant.GET("/conversations/:conversationId/messages", middleware.RequirePermission("messages", "r"), handlers.GetConversationMessages)
+			tenant.GET("/conversations/:conversationId/evaluations", middleware.RequirePermission("messages", "r"), handlers.GetConversationEvaluations)
+			tenant.GET("/conversations/:conversationId/page", middleware.RequirePermission("messages", "r"), handlers.GetConversationPage)
 
 			// Dashboard
 			tenant.GET("/dashboard", handlers.GetDashboard)
 
 			// Jobs
-			tenant.GET("/jobs", handlers.ListJobs)
-			tenant.POST("/jobs", middleware.RequireRole("owner", "admin"), handlers.CreateJob)
-			tenant.GET("/jobs/:jobId", handlers.GetJob)
-			tenant.PUT("/jobs/:jobId", middleware.RequireRole("owner", "admin"), handlers.UpdateJob)
+			tenant.GET("/jobs", middleware.RequirePermission("jobs", "r"), handlers.ListJobs)
+			tenant.POST("/jobs", middleware.RequirePermission("jobs", "w"), handlers.CreateJob)
+			tenant.GET("/jobs/:jobId", middleware.RequirePermission("jobs", "r"), handlers.GetJob)
+			tenant.PUT("/jobs/:jobId", middleware.RequirePermission("jobs", "w"), handlers.UpdateJob)
 			tenant.DELETE("/jobs/:jobId", middleware.RequirePermission("jobs", "d"), handlers.DeleteJob)
-			tenant.POST("/jobs/:jobId/trigger", middleware.RequireRole("owner", "admin"), handlers.TriggerJob)
-			tenant.POST("/jobs/:jobId/test-run", middleware.RequireRole("owner", "admin"), handlers.TestRunJob)
-			tenant.GET("/jobs/:jobId/runs", handlers.ListJobRuns)
-			tenant.GET("/jobs/:jobId/runs/:runId/results", handlers.ListJobResults)
-			tenant.POST("/test-output", handlers.TestOutput)
+			tenant.POST("/jobs/:jobId/trigger", middleware.RequirePermission("jobs", "w"), handlers.TriggerJob)
+			tenant.POST("/jobs/:jobId/test-run", middleware.RequirePermission("jobs", "w"), handlers.TestRunJob)
+			tenant.POST("/jobs/:jobId/cancel", middleware.RequirePermission("jobs", "w"), handlers.CancelJob)
+			tenant.GET("/jobs/:jobId/runs", middleware.RequirePermission("jobs", "r"), handlers.ListJobRuns)
+			tenant.GET("/jobs/:jobId/runs/:runId/results", middleware.RequirePermission("jobs", "r"), handlers.ListJobResults)
+			tenant.POST("/test-output", middleware.RequirePermission("jobs", "w"), handlers.TestOutput)
 
 			// Activity Logs
 			tenant.GET("/activity-logs", handlers.ListActivityLogs)
@@ -162,18 +185,18 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 			tenant.DELETE("/users/:userId", middleware.RequireRole("owner"), handlers.RemoveUserFromTenant)
 
 			// Job all results + export
-			tenant.GET("/jobs/:jobId/results", handlers.ListAllJobResults)
-			tenant.GET("/jobs/:jobId/results/export", handlers.ExportJobResults)
+			tenant.GET("/jobs/:jobId/results", middleware.RequirePermission("jobs", "r"), handlers.ListAllJobResults)
+			tenant.GET("/jobs/:jobId/results/export", middleware.RequirePermission("jobs", "r"), handlers.ExportJobResults)
 			tenant.DELETE("/jobs/:jobId/results", middleware.RequirePermission("jobs", "d"), handlers.ClearJobResults)
 			tenant.DELETE("/jobs/:jobId/runs", middleware.RequirePermission("jobs", "d"), handlers.ClearJobRuns)
 
 			// Settings
-			tenant.GET("/settings", handlers.GetSettings)
-			tenant.PUT("/settings", handlers.SaveSetting)
-			tenant.PUT("/settings/ai", middleware.RequireRole("owner", "admin"), handlers.SaveAISettings)
-			tenant.PUT("/settings/analysis", middleware.RequireRole("owner", "admin"), handlers.SaveAnalysisSettings)
-			tenant.POST("/settings/ai/test", middleware.RequireRole("owner", "admin"), handlers.TestAIKey)
-			tenant.PUT("/settings/general", middleware.RequireRole("owner", "admin"), handlers.SaveGeneralSettings)
+			tenant.GET("/settings", middleware.RequirePermission("settings", "r"), handlers.GetSettings)
+			tenant.PUT("/settings", middleware.RequirePermission("settings", "w"), handlers.SaveSetting)
+			tenant.PUT("/settings/ai", middleware.RequirePermission("settings", "w"), handlers.SaveAISettings)
+			tenant.PUT("/settings/analysis", middleware.RequirePermission("settings", "w"), handlers.SaveAnalysisSettings)
+			tenant.POST("/settings/ai/test", middleware.RequirePermission("settings", "w"), handlers.TestAIKey)
+			tenant.PUT("/settings/general", middleware.RequirePermission("settings", "w"), handlers.SaveGeneralSettings)
 			tenant.PUT("/settings/password", handlers.ChangePassword)
 
 			// Notification logs

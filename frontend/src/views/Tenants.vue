@@ -2,14 +2,14 @@
   <div>
     <div class="d-flex align-center justify-space-between mb-6">
       <h1 class="text-h5 font-weight-bold">{{ $t('tenants') }}</h1>
-      <v-btn color="primary" prepend-icon="mdi-plus" @click="showDialog = true">{{ $t('create_tenant') }}</v-btn>
+      <v-btn v-if="isAdmin()" color="primary" prepend-icon="mdi-plus" @click="showDialog = true">{{ $t('create_tenant') }}</v-btn>
     </div>
     <v-row>
       <v-col v-for="tenant in tenantStore.tenants" :key="tenant.id" cols="12" sm="6" md="4">
         <v-card class="pa-4 cursor-pointer" hover @click="selectTenant(tenant)">
           <div class="d-flex align-center">
             <v-card-title class="flex-grow-1 pa-0 text-truncate" style="min-width: 0">{{ tenant.name }}</v-card-title>
-            <v-btn icon="mdi-delete" size="x-small" variant="text" color="error" class="flex-shrink-0" @click.stop="confirmDelete(tenant)" />
+            <v-btn v-if="isAdmin()" icon="mdi-delete" size="x-small" variant="text" color="error" class="flex-shrink-0" @click.stop="confirmDelete(tenant)" />
           </div>
           <v-card-subtitle class="pl-0 text-truncate">{{ tenant.slug }}</v-card-subtitle>
           <v-card-text class="d-flex ga-4">
@@ -82,9 +82,12 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTenantStore } from '../stores/tenants'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
 const tenantStore = useTenantStore()
+const authStore = useAuthStore()
+const isAdmin = () => authStore.user?.is_admin === true
 
 const showDialog = ref(false)
 const creating = ref(false)

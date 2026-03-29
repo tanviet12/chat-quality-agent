@@ -6,7 +6,7 @@
 
     <v-row>
       <!-- Conversation List -->
-      <v-col cols="12" :md="selectedConvId ? 5 : 12" :lg="selectedConvId ? 4 : 12">
+      <v-col v-if="mdAndUp || !selectedConvId" cols="12" :md="selectedConvId ? 5 : 12" :lg="selectedConvId ? 4 : 12">
         <!-- Filters -->
         <v-card class="mb-4" variant="outlined">
           <v-card-text class="pa-3">
@@ -45,7 +45,7 @@
                   @update:model-value="debouncedSearch"
                 />
               </v-col>
-              <v-col cols="6" sm="3">
+              <v-col cols="6" sm="3" class="d-flex ga-2 align-center">
                 <v-select
                   v-model="filterEvaluation"
                   :items="evaluationFilterOptions"
@@ -54,12 +54,9 @@
                   density="compact"
                   variant="outlined"
                   hide-details
+                  class="flex-grow-1"
                 />
-              </v-col>
-              <v-col cols="auto" class="d-flex align-center">
-                <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-export" @click="showExportDialog = true">
-                  Export
-                </v-btn>
+                <v-btn v-if="authStore.canEdit('messages')" size="small" variant="tonal" color="primary" icon="mdi-export" @click="showExportDialog = true" />
               </v-col>
             </v-row>
           </v-card-text>
@@ -195,12 +192,12 @@
             <v-tab value="qc">
               <v-icon start size="small">mdi-clipboard-check</v-icon>
               Đánh giá
-              <v-chip v-if="qcGroups.length" size="x-small" color="grey" variant="tonal" class="ml-1">{{ qcGroups.length }}</v-chip>
+              <v-chip v-if="qcGroups.length" size="x-small" color="primary" variant="flat" class="ml-1">{{ qcGroups.length }}</v-chip>
             </v-tab>
             <v-tab value="classification">
               <v-icon start size="small">mdi-tag-multiple</v-icon>
               Phân loại
-              <v-chip v-if="classGroups.length" size="x-small" color="grey" variant="tonal" class="ml-1">{{ classGroups.length }}</v-chip>
+              <v-chip v-if="classGroups.length" size="x-small" color="primary" variant="flat" class="ml-1">{{ classGroups.length }}</v-chip>
             </v-tab>
           </v-tabs>
 
@@ -348,13 +345,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
+import { useDisplay } from 'vuetify'
 import { useConversationStore, type Message } from '../stores/conversations'
 import { useChannelStore } from '../stores/channels'
+import { useAuthStore } from '../stores/auth'
 import api from '../api'
 
 const route = useRoute()
+const { mdAndUp } = useDisplay()
 const conversationStore = useConversationStore()
 const channelStore = useChannelStore()
+const authStore = useAuthStore()
 
 const tenantId = computed(() => route.params.tenantId as string)
 
@@ -713,7 +714,9 @@ onUnmounted(() => {
 })
 
 function isImageAttachment(att: any): boolean {
-  return att.type && (att.type.startsWith('image') || att.type === 'image')
+  if (!att.type) return false
+  const t = att.type.toLowerCase()
+  return t.startsWith('image') || t === 'photo' || t === 'gif' || t === 'sticker'
 }
 
 function onImageError(event: Event, att: any) {

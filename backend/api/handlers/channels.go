@@ -108,24 +108,31 @@ func CreateChannel(c *gin.Context) {
 			AccessToken string `json:"access_token"`
 		}
 		if err := json.Unmarshal(req.Credentials, &fbCreds); err == nil && fbCreds.AccessToken != "" {
-			// Try to get Page Access Token from the provided token
-			pageID, pageToken, pageName, err := getFBPageToken(fbCreds.AccessToken)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			// Use the actual page token and page ID
-			fbCreds.PageID = pageID
-			fbCreds.AccessToken = pageToken
-			if pageName != "" {
-				channelName = pageName
-			}
-			externalID = pageID
+			// Try to exchange for page token via /me/accounts
+			// If PageID provided, find that specific page; otherwise first page
+			pageID, pageToken, pageName, exchangeErr := getFBPageToken(fbCreds.AccessToken, fbCreds.PageID)
+			if exchangeErr == nil {
+				// Exchange succeeded — use the page token
+				fbCreds.PageID = pageID
+				fbCreds.AccessToken = pageToken
+				if pageName != "" {
+					channelName = pageName
+				}
+				externalID = pageID
 
-			updatedCreds, _ := json.Marshal(fbCreds)
-			credentialsToStore, err = pkg.Encrypt(updatedCreds, cfg.EncryptionKey)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
+				updatedCreds, _ := json.Marshal(fbCreds)
+				credentialsToStore, err = pkg.Encrypt(updatedCreds, cfg.EncryptionKey)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
+					return
+				}
+			} else if fbCreds.PageID != "" {
+				// Exchange failed but PageID provided — token might already be a Page Token
+				log.Printf("[channels] getFBPageToken failed for page %s, using token as-is: %v", fbCreds.PageID, exchangeErr)
+				externalID = fbCreds.PageID
+			} else {
+				// No PageID and exchange failed — cannot proceed
+				c.JSON(http.StatusBadRequest, gin.H{"error": exchangeErr.Error()})
 				return
 			}
 		}
@@ -685,7 +692,7 @@ func FacebookOAuthCallback(c *gin.Context) {
 	}
 
 	// Step 3: Get user's pages and find the page access token
-	pageID, pageToken, pageName, err := getFBPageToken(longLivedToken)
+	pageID, pageToken, pageName, err := getFBPageToken(longLivedToken, "")
 	if err != nil {
 		log.Printf("[error] facebook get page token for channel %s: %v", channelID, err)
 		redirectWithError(c, tenantID, "Page token retrieval failed")
@@ -777,7 +784,9 @@ func getLongLivedFBToken(appID, appSecret, shortToken string) (string, error) {
 	return token, nil
 }
 
-func getFBPageToken(userToken string) (pageID, pageToken, pageName string, err error) {
+// getFBPageToken exchanges a user token for a page token via /me/accounts.
+// If targetPageID is provided, it finds that specific page; otherwise returns the first page.
+func getFBPageToken(userToken string, targetPageID string) (pageID, pageToken, pageName string, err error) {
 	apiURL := fmt.Sprintf("https://graph.facebook.com/v21.0/me/accounts?access_token=%s&fields=id,name,access_token", userToken)
 
 	resp, err := httpClientWithTimeout.Get(apiURL)
@@ -804,7 +813,21 @@ func getFBPageToken(userToken string) (pageID, pageToken, pageName string, err e
 		return "", "", "", fmt.Errorf("no pages found - make sure you have admin access to a Facebook Page")
 	}
 
-	// Use first page (most common case)
+	// If targetPageID specified, find that specific page
+	if targetPageID != "" {
+		for _, item := range data {
+			page, _ := item.(map[string]interface{})
+			id, _ := page["id"].(string)
+			if id == targetPageID {
+				pageToken, _ = page["access_token"].(string)
+				pageName, _ = page["name"].(string)
+				return id, pageToken, pageName, nil
+			}
+		}
+		return "", "", "", fmt.Errorf("page %s not found in your account - make sure you have admin access to this page", targetPageID)
+	}
+
+	// No target: use first page
 	page, _ := data[0].(map[string]interface{})
 	pageID, _ = page["id"].(string)
 	pageToken, _ = page["access_token"].(string)
@@ -835,6 +858,9 @@ func GetChannelSyncHistory(c *gin.Context) {
 	perPage, _ := strconv.Atoi(c.DefaultQuery("per_page", "10"))
 	if page < 1 {
 		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 10
 	}
 
 	var total int64

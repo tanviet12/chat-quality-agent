@@ -416,6 +416,16 @@ func GetProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// GetTenantMe returns current user's role and permissions within a tenant.
+func GetTenantMe(c *gin.Context) {
+	role := middleware.GetTenantRole(c)
+	perms := c.GetString("tenant_permissions")
+	c.JSON(http.StatusOK, gin.H{
+		"role":        role,
+		"permissions": perms,
+	})
+}
+
 type UpdateProfileRequest struct {
 	Name string `json:"name" binding:"required"`
 }

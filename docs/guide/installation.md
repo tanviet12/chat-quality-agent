@@ -71,6 +71,19 @@ Truy cập:
 
 Lần đầu sẽ hiện trang Setup để tạo tài khoản admin.
 
+## Chạy trên localhost (Mac / Windows)
+
+Bạn có thể chạy CQA trên chính máy cá nhân bằng Docker Desktop để test trước khi deploy VPS.
+
+**Yêu cầu:**
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac hoặc Windows)
+- Clone repo và chạy `docker compose up -d --build`
+- Truy cập `http://localhost`
+
+**Lưu ý kết nối kênh chat:**
+- **Zalo OA**: Hỗ trợ callback URL là `http://localhost` — có thể test đầy đủ trên máy local
+- **Facebook Fanpage**: Yêu cầu HTTPS — không dùng localhost được, cần deploy lên VPS với domain + SSL
+
 ## Kiểm tra trạng thái
 
 ```bash
@@ -95,14 +108,6 @@ docker compose logs app -f    # Chỉ xem app
 docker compose logs nginx -f  # Chỉ xem nginx
 ```
 
-## Cập nhật phiên bản mới
-
-```bash
-cd /opt/cqa
-docker compose pull
-docker compose up -d
-```
-
 ## Gỡ cài đặt
 
 ```bash
@@ -117,5 +122,6 @@ rm -rf /opt/cqa
 
 ## Bước tiếp theo
 
+- [Cập nhật phiên bản](/guide/updates) — Cập nhật thủ công hoặc tự động
 - [Tên miền & SSL](/guide/domain-ssl) — Trỏ domain và bật HTTPS
 - [Thiết lập ban đầu](/guide/initial-setup) — Tạo admin, cấu hình AI

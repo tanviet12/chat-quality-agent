@@ -3,8 +3,11 @@ package db
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/nmtan2001/chat-quality-agent/db/models"
+	_ "github.com/lib/pq"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -19,7 +22,29 @@ func Connect(dsn string, isProduction bool) error {
 	}
 
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+	var dialector gorm.Dialector
+
+	// Detect database type from DSN or environment
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		// Auto-detect from DSN format
+		if len(dsn) > 8 && dsn[:8] == "postgres:" {
+			dbType = "postgres"
+		} else {
+			dbType = "mysql"
+		}
+	}
+
+	switch dbType {
+	case "postgres":
+		dialector = postgres.Open(dsn)
+	case "mysql":
+		dialector = mysql.Open(dsn)
+	default:
+		dialector = mysql.Open(dsn)
+	}
+
+	DB, err = gorm.Open(dialector, &gorm.Config{
 		Logger: logger.Default.LogMode(logLevel),
 	})
 	if err != nil {

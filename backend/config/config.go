@@ -76,6 +76,14 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) DSN() string {
+	// Check if using PostgreSQL (Render uses pgsql:// prefix)
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "postgres" {
+		// PostgreSQL format: postgres://user:pass@host:port/dbname
+		return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
+			c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
+	}
+	// MySQL format
 	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
 }

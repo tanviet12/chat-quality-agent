@@ -29,6 +29,47 @@ func NewSyncEngine(cfg *config.Config) *SyncEngine {
 	return &SyncEngine{cfg: cfg}
 }
 
+// AttachZaloTokenRefresh gắn callback lưu lại access/refresh token mới sau khi
+// adapter Zalo xoay token (refresh token của Zalo dùng một lần, không lưu lại
+// thì lần gọi sau sẽ không refresh được nữa).
+func AttachZaloTokenRefresh(adapter channels.ChannelAdapter, channelID, encKey string) {
+	zaloAdapter, ok := adapter.(*channels.ZaloOAAdapter)
+	if !ok {
+		return
+	}
+	zaloAdapter.SetTokenRefreshCallback(func(newAccess, newRefresh string) {
+		persistRefreshedTokens(channelID, encKey, newAccess, newRefresh)
+	})
+}
+
+// persistRefreshedTokens ghi access/refresh token mới vào kênh.
+func persistRefreshedTokens(channelID, encKey, newAccess, newRefresh string) {
+	var ch models.Channel
+	if db.DB.First(&ch, "id = ?", channelID).Error != nil {
+		return
+	}
+	oldCreds, err := pkg.Decrypt(ch.CredentialsEncrypted, encKey)
+	if err != nil {
+		log.Printf("[sync] decrypt failed for token persist: %v", err)
+		return
+	}
+	var credsMap map[string]interface{}
+	if err := json.Unmarshal(oldCreds, &credsMap); err != nil {
+		log.Printf("[sync] unmarshal creds failed: %v", err)
+		return
+	}
+	credsMap["access_token"] = newAccess
+	credsMap["refresh_token"] = newRefresh
+	newCredJSON, _ := json.Marshal(credsMap)
+	encrypted, err := pkg.Encrypt(newCredJSON, encKey)
+	if err != nil {
+		log.Printf("[sync] encrypt failed for token persist: %v", err)
+		return
+	}
+	db.DB.Model(&ch).Update("credentials_encrypted", encrypted)
+	log.Printf("[sync] persisted refreshed Zalo tokens for channel %s", channelID)
+}
+
 // SyncChannel syncs a single channel: fetches conversations + messages and upserts into DB.
 func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) error {
 	log.Printf("[sync] starting sync for channel %s (%s)", channel.Name, channel.ChannelType)
@@ -45,36 +86,7 @@ func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) er
 	}
 
 	// Set token refresh callback for Zalo — persist new tokens to DB after refresh
-	if zaloAdapter, ok := adapter.(*channels.ZaloOAAdapter); ok {
-		chID := channel.ID
-		encKey := s.cfg.EncryptionKey
-		zaloAdapter.SetTokenRefreshCallback(func(newAccess, newRefresh string) {
-			var ch models.Channel
-			if db.DB.First(&ch, "id = ?", chID).Error != nil {
-				return
-			}
-			oldCreds, err := pkg.Decrypt(ch.CredentialsEncrypted, encKey)
-			if err != nil {
-				log.Printf("[sync] decrypt failed for token persist: %v", err)
-				return
-			}
-			var credsMap map[string]interface{}
-			if err := json.Unmarshal(oldCreds, &credsMap); err != nil {
-				log.Printf("[sync] unmarshal creds failed: %v", err)
-				return
-			}
-			credsMap["access_token"] = newAccess
-			credsMap["refresh_token"] = newRefresh
-			newCredJSON, _ := json.Marshal(credsMap)
-			encrypted, err := pkg.Encrypt(newCredJSON, encKey)
-			if err != nil {
-				log.Printf("[sync] encrypt failed for token persist: %v", err)
-				return
-			}
-			db.DB.Model(&ch).Update("credentials_encrypted", encrypted)
-			log.Printf("[sync] persisted refreshed Zalo tokens for channel %s", chID)
-		})
-	}
+	AttachZaloTokenRefresh(adapter, channel.ID, s.cfg.EncryptionKey)
 
 	// Determine since — use last_sync_at or default to 7 days ago
 	// Subtract 1 hour buffer to avoid missing messages near the boundary

@@ -30,6 +30,21 @@ import (
 // Shared HTTP client with timeout for external API calls
 var httpClientWithTimeout = &http.Client{Timeout: 30 * time.Second}
 
+// newChannelAdapter tạo adapter theo loại kênh. Biến để test thay bằng stub.
+var newChannelAdapter = channels.NewAdapter
+
+// checkChannelHealth kiểm tra kết nối thật của kênh qua HealthCheck của adapter.
+// Với Zalo OA, HealthCheck có thể xoay refresh token nên token mới phải được lưu lại,
+// nếu không thì lần kiểm tra kết nối đầu tiên sẽ làm hỏng luôn kênh đó.
+func checkChannelHealth(ctx context.Context, channel models.Channel, credBytes []byte, cfg *config.Config) error {
+	adapter, err := newChannelAdapter(channel.ChannelType, credBytes)
+	if err != nil {
+		return err
+	}
+	engine.AttachZaloTokenRefresh(adapter, channel.ID, cfg.EncryptionKey)
+	return adapter.HealthCheck(ctx)
+}
+
 type CreateChannelRequest struct {
 	ChannelType string          `json:"channel_type" binding:"required,oneof=zalo_oa facebook pancake"`
 	Name        string          `json:"name" binding:"required,min=2,max=255"`
@@ -334,7 +349,12 @@ func TestChannelConnection(c *gin.Context) {
 		return
 	}
 
-	_ = credBytes // TODO: use with channel adapter HealthCheck
+	// Kiểm tra token thật qua HealthCheck, không báo "thành công" khi token đã hết hạn.
+	if err := checkChannelHealth(c.Request.Context(), channel, credBytes, cfg); err != nil {
+		log.Printf("[channels] health check failed for channel %s: %v", channelID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "connection_failed"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "connection_successful"})
 }
